@@ -1,10 +1,14 @@
+use crate::cache::CacheService;
 use crate::config::{RouteAuthConfig, RouteConfig};
+use crate::cors::CorsConfig;
 use crate::error::{GatewayError, Result};
 use crate::healthcheck::HealthChecker;
+use crate::ipfilter::IpFilterService;
 use crate::loadbalancer::strategies::{
     LoadBalancingStrategy, RoundRobinStrategy, WeightedStrategy,
 };
 use crate::loadbalancer::LoadBalancer;
+use crate::transform::TransformService;
 use http::Method;
 use matchit::Router as MatchitRouter;
 use std::collections::HashMap;
@@ -25,6 +29,14 @@ pub struct Route {
     pub description: String,
     /// Authentication configuration
     pub auth: Option<RouteAuthConfig>,
+    /// Request/response transformation service
+    pub transform: Option<Arc<TransformService>>,
+    /// CORS configuration
+    pub cors: Option<CorsConfig>,
+    /// IP filter service
+    pub ip_filter: Option<Arc<IpFilterService>>,
+    /// Cache service
+    pub cache: Option<Arc<CacheService>>,
 }
 
 /// Gateway router for matching incoming requests to backend services
@@ -75,6 +87,29 @@ impl Router {
                 checker
             });
 
+            // Create transform service if configured
+            let transform = route_config
+                .transform
+                .as_ref()
+                .map(|config| TransformService::new(config.clone()))
+                .transpose()?
+                .map(Arc::new);
+
+            // Create IP filter service if configured
+            let ip_filter = route_config
+                .ip_filter
+                .as_ref()
+                .map(|config| IpFilterService::new(config.clone()))
+                .transpose()?
+                .map(Arc::new);
+
+            // Create cache service if configured
+            let cache = route_config
+                .cache
+                .as_ref()
+                .filter(|c| c.enabled)
+                .map(|config| Arc::new(CacheService::new(config.clone())));
+
             let route = Route {
                 load_balancer,
                 health_checker,
@@ -82,6 +117,10 @@ impl Router {
                 strip_prefix: route_config.strip_prefix,
                 description: route_config.description,
                 auth: route_config.auth,
+                transform,
+                cors: route_config.cors,
+                ip_filter,
+                cache,
             };
 
             // Convert path syntax from :param to {param} and *path to {*path}
@@ -233,6 +272,10 @@ mod tests {
                 description: "User service".to_string(),
                 auth: None,
                 rate_limit: None,
+                transform: None,
+                cors: None,
+                ip_filter: None,
+                cache: None,
             },
             RouteConfig {
                 path: "/api/orders/:id".to_string(),
@@ -245,6 +288,10 @@ mod tests {
                 description: "Order service".to_string(),
                 auth: None,
                 rate_limit: None,
+                transform: None,
+                cors: None,
+                ip_filter: None,
+                cache: None,
             },
             RouteConfig {
                 path: "/v1/products/*path".to_string(),
@@ -257,6 +304,10 @@ mod tests {
                 description: "Product service".to_string(),
                 auth: None,
                 rate_limit: None,
+                transform: None,
+                cors: None,
+                ip_filter: None,
+                cache: None,
             },
         ]
     }
@@ -365,6 +416,10 @@ mod tests {
                 strip_prefix: false,
                 description: "".to_string(),
                 auth: None,
+                transform: None,
+                cors: None,
+                ip_filter: None,
+                cache: None,
             },
             params: HashMap::new(),
             matched_path: "/api/users".to_string(),
@@ -393,6 +448,10 @@ mod tests {
                 strip_prefix: true,
                 description: "".to_string(),
                 auth: None,
+                transform: None,
+                cors: None,
+                ip_filter: None,
+                cache: None,
             },
             params: HashMap::new(),
             matched_path: "/v1/products".to_string(),
@@ -416,6 +475,10 @@ mod tests {
             description: "".to_string(),
             auth: None,
             rate_limit: None,
+            transform: None,
+            cors: None,
+            ip_filter: None,
+            cache: None,
         }];
 
         let router = Router::new(routes).unwrap();

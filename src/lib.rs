@@ -1,14 +1,19 @@
 pub mod auth;
+pub mod cache;
 pub mod circuit_breaker;
 pub mod config;
+pub mod cors;
 pub mod error;
 pub mod healthcheck;
+pub mod hotreload;
+pub mod ipfilter;
 pub mod loadbalancer;
 pub mod metrics;
 pub mod observability;
 pub mod proxy;
 pub mod rate_limit;
 pub mod router;
+pub mod transform;
 
 use crate::config::GatewayConfig;
 use crate::error::Result;

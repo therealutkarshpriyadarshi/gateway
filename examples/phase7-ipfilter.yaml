@@ -1,0 +1,80 @@
+# Phase 7 Example: IP Filtering (Whitelist/Blacklist)
+# This configuration demonstrates IP-based access control
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  timeout_secs: 30
+
+# Global IP filtering (applied to all routes unless overridden)
+ip_filter:
+  # Block specific malicious IPs globally
+  blacklist:
+    - "192.0.2.1"
+    - "198.51.100.0/24"
+  default_action: allow  # Allow all IPs except those in blacklist
+
+routes:
+  # Example 1: Public API (uses global IP filter)
+  - path: "/api/public/*path"
+    backend: "http://localhost:3000"
+    description: "Public API with global IP filtering"
+
+  # Example 2: Whitelist only specific IPs
+  - path: "/api/admin/*path"
+    backend: "http://localhost:3001"
+    description: "Admin API - whitelist only"
+    ip_filter:
+      whitelist:
+        - "10.0.0.0/8"         # Internal network
+        - "172.16.0.0/12"      # Private network
+        - "192.168.1.0/24"     # Office network
+        - "203.0.113.5"        # Specific admin IP
+      default_action: deny     # Deny all others
+
+  # Example 3: Blacklist with exceptions
+  - path: "/api/reports/*path"
+    backend: "http://localhost:3002"
+    description: "Reports API with blacklist"
+    ip_filter:
+      blacklist:
+        - "192.0.2.0/24"       # Known bad network
+        - "198.51.100.100"     # Specific blocked IP
+      default_action: allow
+
+  # Example 4: Partner access (whitelist specific partners)
+  - path: "/api/partners/*path"
+    backend: "http://localhost:3003"
+    description: "Partner API - specific IPs only"
+    ip_filter:
+      whitelist:
+        - "203.0.113.10"       # Partner A
+        - "203.0.113.20"       # Partner B
+        - "203.0.113.30"       # Partner C
+        - "198.51.100.0/28"    # Partner D network
+      default_action: deny
+
+  # Example 5: Internal services (internal networks only)
+  - path: "/internal/*path"
+    backend: "http://localhost:3004"
+    description: "Internal services - private IPs only"
+    ip_filter:
+      whitelist:
+        - "10.0.0.0/8"         # RFC1918 - Class A
+        - "172.16.0.0/12"      # RFC1918 - Class B
+        - "192.168.0.0/16"     # RFC1918 - Class C
+        - "127.0.0.1"          # Localhost
+        - "::1"                # IPv6 localhost
+      default_action: deny
+
+  # Example 6: IPv6 support
+  - path: "/api/ipv6/*path"
+    backend: "http://localhost:3005"
+    description: "API with IPv6 filtering"
+    ip_filter:
+      whitelist:
+        - "2001:db8::/32"      # IPv6 example range
+        - "2001:db8:1234::1"   # Specific IPv6 address
+      blacklist:
+        - "2001:db8:bad::/48"  # Blocked IPv6 range
+      default_action: allow

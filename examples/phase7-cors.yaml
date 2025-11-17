@@ -1,0 +1,89 @@
+# Phase 7 Example: CORS Configuration
+# This configuration demonstrates CORS (Cross-Origin Resource Sharing) setup
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  timeout_secs: 30
+
+# Global CORS configuration (applied to all routes unless overridden)
+cors:
+  allowed_origins:
+    - "https://example.com"
+    - "https://app.example.com"
+  allowed_methods:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "DELETE"
+    - "OPTIONS"
+  allowed_headers:
+    - "Content-Type"
+    - "Authorization"
+    - "X-API-Key"
+  exposed_headers:
+    - "X-Request-ID"
+    - "X-RateLimit-Remaining"
+  allow_credentials: true
+  max_age_secs: 3600  # 1 hour
+
+routes:
+  # Example 1: Using global CORS
+  - path: "/api/public/*path"
+    backend: "http://localhost:3000"
+    description: "Public API with global CORS"
+
+  # Example 2: Permissive CORS for public endpoints
+  - path: "/api/open/*path"
+    backend: "http://localhost:3001"
+    description: "Open API with permissive CORS"
+    cors:
+      allowed_origins:
+        - "*"
+      allowed_methods:
+        - "GET"
+        - "POST"
+        - "OPTIONS"
+      allowed_headers:
+        - "*"
+      allow_credentials: false
+      max_age_secs: 86400  # 24 hours
+
+  # Example 3: Restrictive CORS for sensitive endpoints
+  - path: "/api/admin/*path"
+    backend: "http://localhost:3002"
+    description: "Admin API with restrictive CORS"
+    cors:
+      allowed_origins:
+        - "https://admin.example.com"
+      allowed_methods:
+        - "GET"
+        - "POST"
+      allowed_headers:
+        - "Content-Type"
+        - "Authorization"
+      allow_credentials: true
+      max_age_secs: 600  # 10 minutes
+
+  # Example 4: Multiple specific origins
+  - path: "/api/partners/*path"
+    backend: "http://localhost:3003"
+    description: "Partner API with specific origins"
+    cors:
+      allowed_origins:
+        - "https://partner1.com"
+        - "https://partner2.com"
+        - "https://partner3.com"
+      allowed_methods:
+        - "GET"
+        - "POST"
+        - "PUT"
+      allowed_headers:
+        - "Content-Type"
+        - "X-API-Key"
+      exposed_headers:
+        - "X-Request-ID"
+        - "X-Rate-Limit-Remaining"
+        - "X-Rate-Limit-Reset"
+      allow_credentials: false
+      max_age_secs: 1800  # 30 minutes

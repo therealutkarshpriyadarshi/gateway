@@ -1,0 +1,125 @@
+# Phase 7 Example: Response Caching
+# This configuration demonstrates in-memory response caching
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  timeout_secs: 30
+
+# Global cache configuration
+cache:
+  enabled: true
+  max_capacity: 1000           # Maximum number of cached responses
+  ttl_secs: 300                # 5 minutes default TTL
+  cacheable_methods:
+    - "GET"
+    - "HEAD"
+  cacheable_status_codes:
+    - 200
+    - 301
+    - 302
+    - 404
+  key_headers: []              # Headers to include in cache key
+  cache_with_cookies: false    # Don't cache responses with Set-Cookie
+
+routes:
+  # Example 1: Basic caching (uses global config)
+  - path: "/api/products/*path"
+    backend: "http://localhost:3000"
+    description: "Product API with default caching"
+
+  # Example 2: Long-lived cache for static data
+  - path: "/api/categories"
+    backend: "http://localhost:3001"
+    description: "Categories with long cache TTL"
+    cache:
+      enabled: true
+      max_capacity: 100
+      ttl_secs: 3600           # 1 hour
+      cacheable_methods:
+        - "GET"
+      cacheable_status_codes:
+        - 200
+
+  # Example 3: Cache with header-based keys
+  - path: "/api/content/*path"
+    backend: "http://localhost:3002"
+    description: "Content API with language-specific caching"
+    cache:
+      enabled: true
+      max_capacity: 500
+      ttl_secs: 600            # 10 minutes
+      cacheable_methods:
+        - "GET"
+      cacheable_status_codes:
+        - 200
+      # Cache different versions based on these headers
+      key_headers:
+        - "Accept-Language"
+        - "Accept-Encoding"
+
+  # Example 4: Aggressive caching for rarely-changing data
+  - path: "/api/config"
+    backend: "http://localhost:3003"
+    description: "Configuration endpoint with aggressive caching"
+    cache:
+      enabled: true
+      max_capacity: 50
+      ttl_secs: 86400          # 24 hours
+      cacheable_methods:
+        - "GET"
+        - "HEAD"
+      cacheable_status_codes:
+        - 200
+        - 304                  # Not Modified
+
+  # Example 5: Short-lived cache for dynamic data
+  - path: "/api/stats/*path"
+    backend: "http://localhost:3004"
+    description: "Statistics with short cache"
+    cache:
+      enabled: true
+      max_capacity: 200
+      ttl_secs: 60             # 1 minute
+      cacheable_methods:
+        - "GET"
+      cacheable_status_codes:
+        - 200
+
+  # Example 6: No caching for user-specific data
+  - path: "/api/users/:id/profile"
+    backend: "http://localhost:3005"
+    description: "User profiles - no caching"
+    cache:
+      enabled: false
+
+  # Example 7: Cache with cookies allowed (use with caution)
+  - path: "/api/personalized/*path"
+    backend: "http://localhost:3006"
+    description: "Personalized content with cookie-aware caching"
+    cache:
+      enabled: true
+      max_capacity: 300
+      ttl_secs: 180            # 3 minutes
+      cacheable_methods:
+        - "GET"
+      cacheable_status_codes:
+        - 200
+      key_headers:
+        - "Cookie"             # Include cookie in cache key
+      cache_with_cookies: true # Allow caching with Set-Cookie
+
+  # Example 8: Error response caching
+  - path: "/api/external/*path"
+    backend: "http://localhost:3007"
+    description: "External API with error caching"
+    cache:
+      enabled: true
+      max_capacity: 100
+      ttl_secs: 120            # 2 minutes
+      cacheable_methods:
+        - "GET"
+      cacheable_status_codes:
+        - 200
+        - 404                  # Cache 404 responses
+        - 503                  # Cache service unavailable

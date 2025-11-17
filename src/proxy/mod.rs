@@ -1,4 +1,5 @@
 use crate::auth::AuthService;
+use crate::cache::CacheKey;
 use crate::circuit_breaker::{CircuitBreakerService, RetryExecutor};
 use crate::error::{GatewayError, Result};
 use crate::metrics;
@@ -88,6 +89,19 @@ pub async fn proxy_handler(
         "Route matched"
     );
 
+    // Check IP filtering if configured
+    if let Some(ip_filter) = &route_match.route.ip_filter {
+        if !ip_filter.is_allowed(&client_ip) {
+            warn!(ip = %client_ip, "IP address blocked by filter");
+            timer.record(403);
+            return Err(GatewayError::Forbidden(format!(
+                "Access denied for IP: {}",
+                client_ip
+            )));
+        }
+        debug!(ip = %client_ip, "IP address allowed by filter");
+    }
+
     // Perform authentication if required and not a health check
     if !is_health_check_path(path) {
         if let Some(route_auth) = &route_match.route.auth {
@@ -125,6 +139,28 @@ pub async fn proxy_handler(
         }
     }
 
+    // Check cache if configured
+    let request_headers = req.headers().clone();  // Clone headers for cache key before consuming req
+    if let Some(cache) = &route_match.route.cache {
+        let cache_key = CacheKey::new(
+            method.to_string(),
+            path.to_string(),
+            query.map(|q| q.to_string()),
+            &request_headers,
+            cache.key_headers(),
+        );
+
+        if let Some(cached_response) = cache.get(&cache_key).await {
+            debug!(
+                method = %method,
+                path = %path,
+                "Returning cached response"
+            );
+            timer.record(cached_response.status.as_u16());
+            return Ok(cached_response.to_response());
+        }
+    }
+
     // Select backend using load balancer
     let backend = match route_match
         .route
@@ -153,9 +189,27 @@ pub async fn proxy_handler(
     // Record backend health
     metrics::record_backend_health(backend.url(), backend.is_healthy());
 
-    // Build backend URL
-    let mut backend_url = route_match.build_backend_url(backend.url(), path);
-    if let Some(q) = query {
+    // Apply path transformation if configured
+    let transformed_path = if let Some(transform) = &route_match.route.transform {
+        transform.transform_path(path)
+    } else {
+        path.to_string()
+    };
+
+    // Apply query parameter transformation if configured
+    let transformed_query = if let Some(transform) = &route_match.route.transform {
+        if let Some(q) = query {
+            Some(transform.transform_query_params(q))
+        } else {
+            None
+        }
+    } else {
+        query.map(|q| q.to_string())
+    };
+
+    // Build backend URL with transformations
+    let mut backend_url = route_match.build_backend_url(backend.url(), &transformed_path);
+    if let Some(q) = transformed_query.as_ref() {
         backend_url.push('?');
         backend_url.push_str(q);
     }
@@ -186,7 +240,13 @@ pub async fn proxy_handler(
 
     // Collect request body and headers for potential retries
     let method_for_request = req.method().clone();
-    let headers_for_request = req.headers().clone();
+    let mut headers_for_request = req.headers().clone();
+
+    // Apply request header transformations if configured
+    if let Some(transform) = &route_match.route.transform {
+        transform.transform_request_headers(&mut headers_for_request)?;
+    }
+
     let body_bytes = req
         .into_body()
         .collect()
@@ -304,7 +364,49 @@ pub async fn proxy_handler(
     // Record metrics with timer
     timer.record(final_status);
 
-    response
+    // Apply response transformations and caching if successful
+    let mut final_response = response?;
+
+    // Apply response header transformations if configured
+    if let Some(transform) = &route_match.route.transform {
+        let headers = final_response.headers_mut();
+        transform.transform_response_headers(headers)?;
+    }
+
+    // Store in cache if configured and response is cacheable
+    if let Some(cache) = &route_match.route.cache {
+        // Create cache key using original request headers
+        let cache_key = CacheKey::new(
+            method.to_string(),
+            path.to_string(),
+            query.map(|q| q.to_string()),
+            &request_headers,  // Use original request headers for cache key
+            cache.key_headers(),
+        );
+
+        // Extract response parts for caching
+        let (parts, body) = final_response.into_parts();
+        let body_bytes = body
+            .collect()
+            .await
+            .map_err(|e| GatewayError::Backend(format!("Failed to read response body: {}", e)))?
+            .to_bytes();
+
+        // Store in cache
+        cache
+            .put(
+                cache_key,
+                parts.status,
+                parts.headers.clone(),
+                body_bytes.clone(),
+            )
+            .await?;
+
+        // Reconstruct response
+        final_response = Response::from_parts(parts, Body::from(body_bytes));
+    }
+
+    Ok(final_response)
 }
 
 /// Send request to the backend service
@@ -417,6 +519,10 @@ mod tests {
             description: "".to_string(),
             auth: None,
             rate_limit: None,
+            transform: None,
+            cors: None,
+            ip_filter: None,
+            cache: None,
         }];
 
         let _router = Router::new(routes).unwrap();

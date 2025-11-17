@@ -62,6 +62,9 @@ pub enum GatewayError {
 
     #[error("Rate limit exceeded: {0}")]
     RateLimitExceeded(String),
+
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
 }
 
 impl GatewayError {
@@ -85,6 +88,7 @@ impl GatewayError {
             GatewayError::InvalidApiKey => StatusCode::UNAUTHORIZED,
             GatewayError::CircuitBreakerOpen(_) => StatusCode::SERVICE_UNAVAILABLE,
             GatewayError::RateLimitExceeded(_) => StatusCode::TOO_MANY_REQUESTS,
+            GatewayError::Forbidden(_) => StatusCode::FORBIDDEN,
         }
     }
 }
