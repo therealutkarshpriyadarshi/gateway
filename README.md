@@ -26,9 +26,20 @@ A production-grade API Gateway built in Rust, providing high-performance request
 
 📖 **See [AUTH.md](AUTH.md) for detailed authentication documentation and examples.**
 
+### Phase 3: Rate Limiting ✅
+
+- **Multiple Dimensions**: Rate limit by IP, User (JWT), API Key, or Route
+- **Multiple Algorithms**: Token bucket (local), sliding window, fixed window, token bucket (Redis)
+- **Local & Distributed**: In-memory rate limiting or Redis-backed for distributed scenarios
+- **Graceful Fallback**: Automatically falls back to local rate limiting if Redis is unavailable
+- **Per-Route Configuration**: Override global limits for specific endpoints
+- **Rate Limit Headers**: Comprehensive `X-RateLimit-*` headers in all responses
+- **Atomic Operations**: Redis Lua scripts ensure consistency in distributed environments
+
+📖 **See [RATE_LIMITING.md](RATE_LIMITING.md) for detailed rate limiting documentation and examples.**
+
 ### Coming Soon
 
-- Rate Limiting (token bucket, Redis-backed)
 - Circuit Breaking & Resilience
 - Load Balancing & Health Checks
 - Observability & Monitoring (Prometheus, OpenTelemetry)
@@ -362,7 +373,7 @@ See [ROADMAP.md](ROADMAP.md) for the complete development plan.
 
 - [x] Phase 1: Foundation & Core Routing (Weeks 1-2)
 - [x] Phase 2: Authentication & Authorization (Week 3)
-- [ ] Phase 3: Rate Limiting (Week 4)
+- [x] Phase 3: Rate Limiting (Week 4)
 - [ ] Phase 4: Circuit Breaking & Resilience (Week 5)
 - [ ] Phase 5: Load Balancing & Health Checks (Week 6)
 - [ ] Phase 6: Observability & Monitoring (Week 7)

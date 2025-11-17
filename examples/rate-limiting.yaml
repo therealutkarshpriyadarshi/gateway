@@ -1,0 +1,125 @@
+# Rate Limiting Example Configuration
+#
+# This example demonstrates comprehensive rate limiting configuration
+# with multiple dimensions and both global and per-route limits.
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  timeout_secs: 30
+
+# Global rate limiting configuration
+rate_limiting:
+  enabled: true
+
+  # Algorithm for Redis-backed rate limiting
+  # Options: sliding_window (most accurate), fixed_window (fastest), token_bucket (smooth)
+  algorithm: sliding_window
+
+  # Global rate limits applied to all routes
+  global:
+    # Limit by IP address - prevents single client from overwhelming the gateway
+    - dimension: ip
+      requests: 1000
+      window_secs: 3600  # 1000 requests per hour per IP
+
+    # Limit by authenticated user - more generous than IP limits
+    - dimension: user
+      requests: 5000
+      window_secs: 3600  # 5000 requests per hour per authenticated user
+
+  # Redis configuration for distributed rate limiting
+  # Comment out to use local-only rate limiting
+  redis:
+    url: "redis://localhost:6379"
+
+# Authentication configuration (needed for user-based rate limiting)
+auth:
+  # JWT configuration
+  jwt:
+    secret: "your-secret-key-here-change-in-production"
+    algorithm: "HS256"
+    issuer: "api-gateway"
+
+  # API Key configuration
+  api_key:
+    header: "X-API-Key"
+    keys:
+      "premium-key-abc123": "Premium tier customer"
+      "standard-key-def456": "Standard tier customer"
+      "free-key-ghi789": "Free tier customer"
+
+# Routes with different rate limiting strategies
+routes:
+  # Public endpoint - strictest rate limits
+  - path: "/api/public/*path"
+    backend: "http://localhost:3000"
+    methods: ["GET"]
+    description: "Public API endpoints"
+    rate_limit:
+      - dimension: ip
+        requests: 100
+        window_secs: 60  # 100 requests per minute
+      - dimension: route
+        requests: 10000
+        window_secs: 60  # Total of 10k req/min for this route across all clients
+
+  # Authenticated user endpoints - moderate limits
+  - path: "/api/users"
+    backend: "http://localhost:3001"
+    methods: ["GET", "POST"]
+    description: "User management"
+    auth:
+      required: true
+      methods: [jwt]
+    rate_limit:
+      - dimension: user
+        requests: 100
+        window_secs: 60  # 100 requests per minute per user
+
+  # Expensive operation - very strict limits
+  - path: "/api/reports/generate"
+    backend: "http://localhost:3002"
+    methods: ["POST"]
+    description: "Report generation (expensive operation)"
+    auth:
+      required: true
+      methods: [jwt]
+    rate_limit:
+      - dimension: user
+        requests: 10
+        window_secs: 3600  # Only 10 reports per hour per user
+      - dimension: ip
+        requests: 20
+        window_secs: 3600  # 20 reports per hour per IP (in case user has multiple sessions)
+
+  # API key protected endpoint with key-based limits
+  - path: "/api/data/*path"
+    backend: "http://localhost:3003"
+    methods: ["GET", "POST", "PUT", "DELETE"]
+    description: "Data API"
+    auth:
+      required: true
+      methods: [apikey]
+    rate_limit:
+      - dimension: apikey
+        requests: 1000
+        window_secs: 3600  # Each API key gets 1000 req/hour
+        burst: 1200  # Allow short bursts up to 1200
+
+  # Admin endpoints - no additional rate limits (uses global only)
+  - path: "/api/admin/*path"
+    backend: "http://localhost:3004"
+    methods: ["GET", "POST", "PUT", "DELETE"]
+    description: "Admin API"
+    auth:
+      required: true
+      methods: [jwt]
+    # No route-specific rate_limit, uses global limits only
+
+  # Health check - no authentication or rate limiting
+  - path: "/health"
+    backend: "http://localhost:3000/health"
+    methods: ["GET"]
+    description: "Health check endpoint"
+    # No auth or rate limits

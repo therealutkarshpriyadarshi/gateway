@@ -187,6 +187,7 @@ mod tests {
                 strip_prefix: false,
                 description: "User service".to_string(),
                 auth: None,
+                rate_limit: None,
             },
             RouteConfig {
                 path: "/api/orders/:id".to_string(),
@@ -195,6 +196,7 @@ mod tests {
                 strip_prefix: false,
                 description: "Order service".to_string(),
                 auth: None,
+                rate_limit: None,
             },
             RouteConfig {
                 path: "/v1/products/*path".to_string(),
@@ -203,6 +205,7 @@ mod tests {
                 strip_prefix: true,
                 description: "Product service".to_string(),
                 auth: None,
+                rate_limit: None,
             },
         ]
     }
@@ -321,6 +324,7 @@ mod tests {
             strip_prefix: false,
             description: "".to_string(),
             auth: None,
+            rate_limit: None,
         }];
 
         let router = Router::new(routes).unwrap();
