@@ -1,0 +1,68 @@
+# Microservices Gateway Configuration Example
+# This example demonstrates routing to multiple microservices
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  timeout_secs: 60
+
+routes:
+  # Authentication service
+  - path: "/auth/login"
+    backend: "http://auth-service:4000"
+    methods: ["POST"]
+    description: "User login endpoint"
+
+  - path: "/auth/register"
+    backend: "http://auth-service:4000"
+    methods: ["POST"]
+    description: "User registration endpoint"
+
+  # User service
+  - path: "/users/:id"
+    backend: "http://user-service:4001"
+    methods: ["GET", "PUT", "DELETE"]
+    description: "User CRUD operations"
+
+  - path: "/users/:id/profile"
+    backend: "http://user-service:4001"
+    methods: ["GET", "PUT"]
+    description: "User profile management"
+
+  # Product catalog service
+  - path: "/products"
+    backend: "http://catalog-service:4002"
+    methods: ["GET"]
+    description: "List all products"
+
+  - path: "/products/:id"
+    backend: "http://catalog-service:4002"
+    methods: ["GET"]
+    description: "Get product details"
+
+  - path: "/categories/*path"
+    backend: "http://catalog-service:4002"
+    strip_prefix: false
+    description: "Product categories"
+
+  # Order service
+  - path: "/orders"
+    backend: "http://order-service:4003"
+    methods: ["GET", "POST"]
+    description: "Order management"
+
+  - path: "/orders/:id"
+    backend: "http://order-service:4003"
+    methods: ["GET", "PUT"]
+    description: "Order details and updates"
+
+  # Payment service
+  - path: "/payments/process"
+    backend: "http://payment-service:4004"
+    methods: ["POST"]
+    description: "Process payment"
+
+  - path: "/payments/:id/status"
+    backend: "http://payment-service:4004"
+    methods: ["GET"]
+    description: "Check payment status"

@@ -1,0 +1,13 @@
+# Simple Gateway Configuration Example
+# This example shows a minimal configuration
+
+server:
+  host: "127.0.0.1"
+  port: 8080
+  timeout_secs: 30
+
+routes:
+  # Simple proxy to a backend service
+  - path: "/api/*path"
+    backend: "http://localhost:3000"
+    description: "Proxy all /api requests to backend service"

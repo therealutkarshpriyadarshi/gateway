@@ -1,0 +1,47 @@
+# Gateway Configuration
+# This is the main configuration file for the API Gateway
+
+server:
+  # Host address to bind to
+  host: "0.0.0.0"
+  # Port to listen on
+  port: 8080
+  # Request timeout in seconds
+  timeout_secs: 30
+
+# Route definitions
+routes:
+  # User service routes
+  - path: "/api/users"
+    backend: "http://localhost:3000"
+    methods: ["GET", "POST"]
+    description: "User service - list and create users"
+
+  - path: "/api/users/:id"
+    backend: "http://localhost:3000"
+    methods: ["GET", "PUT", "DELETE"]
+    description: "User service - get, update, delete user by ID"
+
+  # Order service routes
+  - path: "/api/orders"
+    backend: "http://localhost:3001"
+    methods: ["GET", "POST"]
+    description: "Order service - list and create orders"
+
+  - path: "/api/orders/:id"
+    backend: "http://localhost:3001"
+    methods: ["GET"]
+    description: "Order service - get order by ID"
+
+  # Product service with wildcard and prefix stripping
+  - path: "/v1/products/*path"
+    backend: "http://localhost:3002"
+    methods: ["GET"]
+    strip_prefix: true
+    description: "Product service - all product endpoints"
+
+  # Health check endpoint
+  - path: "/health"
+    backend: "http://localhost:3000"
+    methods: []  # Empty means all methods allowed
+    description: "Health check endpoint"

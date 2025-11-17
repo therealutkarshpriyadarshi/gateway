@@ -1,0 +1,56 @@
+[package]
+name = "gateway"
+version = "0.1.0"
+edition = "2021"
+authors = ["Gateway Contributors"]
+description = "A production-grade API Gateway built in Rust"
+license = "MIT"
+repository = "https://github.com/therealutkarshpriyadarshi/gateway"
+
+[dependencies]
+# Web framework and async runtime
+axum = { version = "0.7", features = ["macros"] }
+tokio = { version = "1", features = ["full"] }
+tower = { version = "0.4", features = ["util", "timeout", "limit"] }
+tower-http = { version = "0.5", features = ["trace", "cors"] }
+
+# HTTP client for proxying
+reqwest = { version = "0.12", features = ["json"] }
+hyper = { version = "1.0", features = ["full"] }
+http = "1.0"
+http-body-util = "0.1"
+
+# Routing
+matchit = "0.8"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+
+# Logging and tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Configuration
+config = "0.14"
+
+# Async utilities
+async-trait = "0.1"
+futures = "0.3"
+
+[dev-dependencies]
+# Testing
+tokio-test = "0.4"
+wiremock = "0.6"
+assert-json-diff = "2.0"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
