@@ -1,4 +1,5 @@
 use crate::error::{GatewayError, Result};
+use crate::rate_limit::types::{RateLimitConfig, RateLimitDimension};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -12,6 +13,9 @@ pub struct GatewayConfig {
     /// Authentication configuration
     #[serde(default)]
     pub auth: Option<AuthConfig>,
+    /// Rate limiting configuration
+    #[serde(default)]
+    pub rate_limiting: Option<GlobalRateLimitConfig>,
 }
 
 /// Server configuration
@@ -47,6 +51,9 @@ pub struct RouteConfig {
     /// Authentication requirement for this route
     #[serde(default)]
     pub auth: Option<RouteAuthConfig>,
+    /// Rate limiting for this route
+    #[serde(default)]
+    pub rate_limit: Option<Vec<RateLimitConfig>>,
 }
 
 /// Authentication configuration for a route
@@ -116,6 +123,29 @@ pub struct RedisConfig {
     pub prefix: String,
 }
 
+/// Global rate limiting configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GlobalRateLimitConfig {
+    /// Enable rate limiting globally
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Global rate limit rules (applied to all routes)
+    #[serde(default)]
+    pub global: Vec<RateLimitConfig>,
+    /// Redis configuration for distributed rate limiting
+    pub redis: Option<RateLimitRedisConfig>,
+    /// Algorithm to use for Redis rate limiting
+    #[serde(default = "default_rate_limit_algorithm")]
+    pub algorithm: String,
+}
+
+/// Redis configuration for rate limiting
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RateLimitRedisConfig {
+    /// Redis connection URL
+    pub url: String,
+}
+
 fn default_true() -> bool {
     true
 }
@@ -142,6 +172,10 @@ fn default_port() -> u16 {
 
 fn default_timeout() -> u64 {
     30
+}
+
+fn default_rate_limit_algorithm() -> String {
+    "sliding_window".to_string()
 }
 
 impl Default for ServerConfig {
@@ -206,6 +240,40 @@ impl GatewayConfig {
                     )));
                 }
             }
+
+            // Validate rate limits
+            if let Some(rate_limits) = &route.rate_limit {
+                for limit in rate_limits {
+                    if limit.requests == 0 {
+                        return Err(GatewayError::Config(format!(
+                            "Rate limit requests must be > 0 for route: {}",
+                            route.path
+                        )));
+                    }
+                    if limit.window_secs == 0 {
+                        return Err(GatewayError::Config(format!(
+                            "Rate limit window must be > 0 for route: {}",
+                            route.path
+                        )));
+                    }
+                }
+            }
+        }
+
+        // Validate global rate limits
+        if let Some(rate_limiting) = &self.rate_limiting {
+            for limit in &rate_limiting.global {
+                if limit.requests == 0 {
+                    return Err(GatewayError::Config(
+                        "Global rate limit requests must be > 0".to_string(),
+                    ));
+                }
+                if limit.window_secs == 0 {
+                    return Err(GatewayError::Config(
+                        "Global rate limit window must be > 0".to_string(),
+                    ));
+                }
+            }
         }
 
         Ok(())
@@ -217,6 +285,7 @@ impl GatewayConfig {
             server: ServerConfig::default(),
             routes: vec![],
             auth: None,
+            rate_limiting: None,
         }
     }
 }
@@ -277,8 +346,10 @@ routes: []
                 strip_prefix: false,
                 description: "".to_string(),
                 auth: None,
+                rate_limit: None,
             }],
             auth: None,
+            rate_limiting: None,
         };
 
         assert!(config.validate().is_err());
@@ -295,8 +366,10 @@ routes: []
                 strip_prefix: false,
                 description: "".to_string(),
                 auth: None,
+                rate_limit: None,
             }],
             auth: None,
+            rate_limiting: None,
         };
 
         assert!(config.validate().is_err());
@@ -313,8 +386,10 @@ routes: []
                 strip_prefix: false,
                 description: "".to_string(),
                 auth: None,
+                rate_limit: None,
             }],
             auth: None,
+            rate_limiting: None,
         };
 
         assert!(config.validate().is_err());
@@ -331,10 +406,42 @@ routes: []
                 strip_prefix: false,
                 description: "Test route".to_string(),
                 auth: None,
+                rate_limit: None,
             }],
             auth: None,
+            rate_limiting: None,
         };
 
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_rate_limit_config() {
+        let yaml = r#"
+server:
+  host: "127.0.0.1"
+  port: 8080
+
+routes:
+  - path: "/api/test"
+    backend: "http://localhost:3000"
+    rate_limit:
+      - dimension: ip
+        requests: 100
+        window_secs: 60
+
+rate_limiting:
+  enabled: true
+  global:
+    - dimension: ip
+      requests: 1000
+      window_secs: 3600
+"#;
+
+        let config = GatewayConfig::from_yaml(yaml).unwrap();
+        assert!(config.rate_limiting.is_some());
+        assert_eq!(config.rate_limiting.as_ref().unwrap().global.len(), 1);
+        assert_eq!(config.routes[0].rate_limit.as_ref().unwrap().len(), 1);
         assert!(config.validate().is_ok());
     }
 }

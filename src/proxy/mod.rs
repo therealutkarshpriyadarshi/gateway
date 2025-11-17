@@ -230,6 +230,7 @@ mod tests {
             strip_prefix: false,
             description: "".to_string(),
             auth: None,
+            rate_limit: None,
         }];
 
         let _router = Router::new(routes).unwrap();
