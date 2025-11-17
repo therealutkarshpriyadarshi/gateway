@@ -28,7 +28,10 @@ impl CircuitBreakerService {
             .entry(backend.to_string())
             .or_insert_with(|| {
                 debug!(backend = backend, "Creating new circuit breaker");
-                Arc::new(CircuitBreaker::new(backend.to_string(), self.config.clone()))
+                Arc::new(CircuitBreaker::new(
+                    backend.to_string(),
+                    self.config.clone(),
+                ))
             })
             .clone()
     }

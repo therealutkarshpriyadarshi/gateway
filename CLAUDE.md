@@ -4,7 +4,7 @@
 
 **Last Updated**: 2025-11-17
 **Project Version**: 0.1.0
-**Current Phase**: Phase 2 Complete (Authentication & Authorization)
+**Current Phase**: Phase 5 Complete (Load Balancing & Health Checks)
 
 ---
 
@@ -66,10 +66,28 @@ A production-grade API Gateway built in Rust that provides:
   - Per-route authentication configuration
   - Health check bypass
 
+- ✅ Phase 3: Rate Limiting
+  - Token bucket algorithm with `governor` crate
+  - In-memory and Redis-backed rate limiting
+  - Per-IP, per-user, per-API-key, and per-route limiting
+  - Rate limit headers in responses
+
+- ✅ Phase 4: Circuit Breaking & Resilience
+  - Circuit breaker states (Closed, Open, Half-Open)
+  - Per-backend circuit breakers
+  - Configurable failure thresholds
+  - Retry logic with exponential backoff
+  - Fallback responses for open circuits
+
+- ✅ Phase 5: Load Balancing & Health Checks
+  - Load balancing strategies (Round Robin, Least Connections, Weighted, IP Hash)
+  - Active health checks (HTTP, configurable intervals)
+  - Passive health checks (failure-based)
+  - Automatic backend removal/recovery
+  - Connection tracking for least connections strategy
+  - Client IP-based routing for session affinity
+
 **Next Phases** (see ROADMAP.md):
-- Phase 3: Rate Limiting
-- Phase 4: Circuit Breaking & Resilience
-- Phase 5: Load Balancing & Health Checks
 - Phase 6: Observability & Monitoring
 - Phase 7: Advanced Features
 - Phase 8: Production Hardening
@@ -82,7 +100,7 @@ A production-grade API Gateway built in Rust that provides:
 
 ```
 gateway/
-├── src/                          # Source code (~1,855 lines)
+├── src/                          # Source code (~3,500+ lines)
 │   ├── main.rs                   # Binary entry point
 │   ├── lib.rs                    # Library exports
 │   ├── auth/                     # Authentication modules
@@ -90,10 +108,30 @@ gateway/
 │   │   ├── jwt.rs                # JWT validation (HS256/RS256)
 │   │   ├── api_key.rs            # API key validation
 │   │   └── middleware.rs         # Auth extension types
+│   ├── circuit_breaker/          # Circuit breaker & resilience
+│   │   ├── mod.rs                # Module exports
+│   │   ├── types.rs              # Types and configuration
+│   │   ├── breaker.rs            # Circuit breaker logic
+│   │   ├── retry.rs              # Retry executor
+│   │   └── service.rs            # Circuit breaker service
 │   ├── config/                   # Configuration system
 │   │   └── mod.rs                # YAML parsing & validation
 │   ├── error/                    # Error handling
 │   │   └── mod.rs                # GatewayError enum
+│   ├── healthcheck/              # Health check system
+│   │   └── mod.rs                # Active & passive health checks
+│   ├── loadbalancer/             # Load balancing
+│   │   ├── mod.rs                # Load balancer core
+│   │   ├── backend.rs            # Backend management & tracking
+│   │   └── strategies.rs         # LB strategies (RR, LC, Weighted, IP Hash)
+│   ├── rate_limit/               # Rate limiting
+│   │   ├── mod.rs                # Module exports
+│   │   ├── types.rs              # Types and configuration
+│   │   ├── local.rs              # In-memory rate limiting
+│   │   ├── redis.rs              # Redis-backed rate limiting
+│   │   ├── lua_scripts.rs        # Lua scripts for Redis
+│   │   ├── middleware.rs         # Rate limit middleware
+│   │   └── service.rs            # Rate limit service
 │   ├── router/                   # HTTP routing
 │   │   └── mod.rs                # Path matching with matchit
 │   └── proxy/                    # Request proxying
@@ -109,7 +147,12 @@ gateway/
 │   ├── auth-apikey.yaml          # API key authentication
 │   ├── auth-redis.yaml           # Redis-backed keys
 │   ├── auth-rs256.yaml           # RSA JWT validation
-│   └── auth-mixed.yaml           # Multiple auth methods
+│   ├── auth-mixed.yaml           # Multiple auth methods
+│   ├── load-balancer-round-robin.yaml      # Round robin LB
+│   ├── load-balancer-weighted.yaml         # Weighted LB
+│   ├── load-balancer-least-connections.yaml # Least connections LB
+│   ├── load-balancer-ip-hash.yaml          # IP hash LB
+│   └── load-balancer-full-featured.yaml    # Complete example
 ├── .github/workflows/            # CI/CD pipelines
 │   └── ci.yml                    # GitHub Actions workflow
 ├── Cargo.toml                    # Dependencies & metadata
@@ -120,7 +163,7 @@ gateway/
 ├── CONTRIBUTING.md               # Contribution guidelines
 └── LICENSE                       # MIT License
 
-Total: 11 Rust files, ~43 tests
+Total: 20+ Rust files, ~97 tests
 ```
 
 ### Request Flow

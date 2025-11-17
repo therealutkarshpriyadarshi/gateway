@@ -1,0 +1,32 @@
+# Load Balancer Example: Weighted Strategy
+#
+# This configuration demonstrates weighted load balancing where
+# backends with higher weights receive more requests.
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  timeout_secs: 30
+
+routes:
+  - path: "/api/*path"
+    # Backends with different weights
+    backends:
+      - url: "http://powerful-server:3000"
+        weight: 5  # Receives 50% of traffic (5/10)
+      - url: "http://medium-server:3001"
+        weight: 3  # Receives 30% of traffic (3/10)
+      - url: "http://small-server:3002"
+        weight: 2  # Receives 20% of traffic (2/10)
+    load_balancer:
+      strategy: "weighted"
+    health_check:
+      enabled: true
+      interval_secs: 15
+      timeout_secs: 5
+      unhealthy_threshold: 3
+      healthy_threshold: 2
+      path: "/health"
+      expected_status: 200
+      passive_enabled: true
+    description: "API service with weighted load balancing based on server capacity"

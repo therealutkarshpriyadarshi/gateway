@@ -18,6 +18,7 @@ pub struct ApiKeyValidator {
 
 #[derive(Debug, Clone)]
 struct ApiKeyInfo {
+    #[allow(dead_code)]
     description: String,
     metadata: HashMap<String, serde_json::Value>,
 }
@@ -49,9 +50,9 @@ impl ApiKeyValidator {
                 GatewayError::Config(format!("Failed to create Redis client: {}", e))
             })?;
 
-            let connection = ConnectionManager::new(client).await.map_err(|e| {
-                GatewayError::Config(format!("Failed to connect to Redis: {}", e))
-            })?;
+            let connection = ConnectionManager::new(client)
+                .await
+                .map_err(|e| GatewayError::Config(format!("Failed to connect to Redis: {}", e)))?;
 
             Some(Arc::new(RedisKeyStore {
                 connection: Arc::new(RwLock::new(connection)),
@@ -201,15 +202,18 @@ impl RedisKeyStore {
     ) -> Result<()> {
         let mut conn = self.connection.write().await;
         let redis_key = format!("{}{}", self.prefix, key);
-        let metadata_json = serde_json::to_string(metadata)
-            .map_err(|e| GatewayError::Serialization(format!("Failed to serialize metadata: {}", e)))?;
+        let metadata_json = serde_json::to_string(metadata).map_err(|e| {
+            GatewayError::Serialization(format!("Failed to serialize metadata: {}", e))
+        })?;
 
         if let Some(ttl) = ttl_seconds {
-            let _: () = conn.set_ex(&redis_key, metadata_json, ttl)
+            let _: () = conn
+                .set_ex(&redis_key, metadata_json, ttl)
                 .await
                 .map_err(|e| GatewayError::Internal(format!("Redis error: {}", e)))?;
         } else {
-            let _: () = conn.set(&redis_key, metadata_json)
+            let _: () = conn
+                .set(&redis_key, metadata_json)
                 .await
                 .map_err(|e| GatewayError::Internal(format!("Redis error: {}", e)))?;
         }

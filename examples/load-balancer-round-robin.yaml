@@ -1,0 +1,36 @@
+# Load Balancer Example: Round Robin Strategy
+#
+# This configuration demonstrates round-robin load balancing across
+# multiple backend servers with active health checks.
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  timeout_secs: 30
+
+routes:
+  - path: "/api/*path"
+    # Multiple backends for load balancing
+    backends:
+      - url: "http://localhost:3000"
+        weight: 1
+      - url: "http://localhost:3001"
+        weight: 1
+      - url: "http://localhost:3002"
+        weight: 1
+    # Load balancer configuration
+    load_balancer:
+      strategy: "round_robin"
+    # Health check configuration
+    health_check:
+      enabled: true
+      interval_secs: 10        # Check every 10 seconds
+      timeout_secs: 3          # 3 second timeout for health checks
+      unhealthy_threshold: 3   # Mark unhealthy after 3 failures
+      healthy_threshold: 2     # Mark healthy after 2 successes
+      path: "/health"          # Health check endpoint
+      expected_status: 200     # Expected HTTP status
+      passive_enabled: true    # Enable passive health checks
+    methods: []
+    strip_prefix: false
+    description: "API service with round-robin load balancing"

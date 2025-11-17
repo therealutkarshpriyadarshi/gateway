@@ -1,6 +1,5 @@
 use super::types::RetryConfig;
 use backoff::{backoff::Backoff, ExponentialBackoff, ExponentialBackoffBuilder};
-use std::time::Duration;
 use tracing::{debug, warn};
 
 /// Retry executor with exponential backoff
@@ -26,7 +25,11 @@ impl RetryExecutor {
 
         loop {
             attempt += 1;
-            debug!(attempt, max_retries = self.config.max_retries, "Executing request");
+            debug!(
+                attempt,
+                max_retries = self.config.max_retries,
+                "Executing request"
+            );
 
             match f().await {
                 Ok(result) => {
@@ -81,7 +84,11 @@ impl RetryExecutor {
 
         loop {
             attempt += 1;
-            debug!(attempt, max_retries = self.config.max_retries, "Executing request");
+            debug!(
+                attempt,
+                max_retries = self.config.max_retries,
+                "Executing request"
+            );
 
             match f().await {
                 Ok(result) => {
@@ -138,6 +145,7 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU32, Ordering};
     use std::sync::Arc;
+    use std::time::Duration;
 
     #[tokio::test]
     async fn test_retry_succeeds_immediately() {

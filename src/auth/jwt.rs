@@ -1,7 +1,7 @@
 use crate::config::JwtConfig;
 use crate::error::{GatewayError, Result};
 use axum::http::HeaderMap;
-use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -32,6 +32,7 @@ pub struct Claims {
 pub struct JwtValidator {
     decoding_key: DecodingKey,
     validation: Validation,
+    #[allow(dead_code)]
     algorithm: Algorithm,
 }
 
@@ -55,9 +56,8 @@ impl JwtValidator {
                         "JWT public key is required for RS256/RS384/RS512 algorithms".to_string(),
                     )
                 })?;
-                DecodingKey::from_rsa_pem(public_key.as_bytes()).map_err(|e| {
-                    GatewayError::Config(format!("Invalid RSA public key: {}", e))
-                })?
+                DecodingKey::from_rsa_pem(public_key.as_bytes())
+                    .map_err(|e| GatewayError::Config(format!("Invalid RSA public key: {}", e)))?
             }
             _ => {
                 return Err(GatewayError::Config(format!(
@@ -113,7 +113,10 @@ impl JwtValidator {
         if let Some(aud) = &claims.aud {
             metadata.insert("aud".to_string(), serde_json::Value::String(aud.clone()));
         }
-        metadata.insert("exp".to_string(), serde_json::Value::Number(claims.exp.into()));
+        metadata.insert(
+            "exp".to_string(),
+            serde_json::Value::Number(claims.exp.into()),
+        );
 
         Ok(AuthResult {
             user_id: claims.sub,
@@ -229,7 +232,10 @@ mod tests {
         let token = create_test_token(secret, &claims);
 
         let mut headers = HeaderMap::new();
-        headers.insert("Authorization", format!("Bearer {}", token).parse().unwrap());
+        headers.insert(
+            "Authorization",
+            format!("Bearer {}", token).parse().unwrap(),
+        );
 
         let result = validator.validate(&headers).await;
         assert!(result.is_ok());
@@ -261,7 +267,10 @@ mod tests {
         let token = create_test_token(secret, &claims);
 
         let mut headers = HeaderMap::new();
-        headers.insert("Authorization", format!("Bearer {}", token).parse().unwrap());
+        headers.insert(
+            "Authorization",
+            format!("Bearer {}", token).parse().unwrap(),
+        );
 
         let result = validator.validate(&headers).await;
         assert!(result.is_err());
@@ -282,7 +291,10 @@ mod tests {
 
         let result = validator.validate(&headers).await;
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), GatewayError::MissingCredentials));
+        assert!(matches!(
+            result.unwrap_err(),
+            GatewayError::MissingCredentials
+        ));
     }
 
     #[tokio::test]

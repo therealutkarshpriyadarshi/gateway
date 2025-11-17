@@ -1,7 +1,6 @@
 use super::service::RateLimiterService;
 use super::types::{RateLimitConfig, RateLimitDimension, RateLimitKey};
 use axum::{
-    body::Body,
     extract::{ConnectInfo, Request},
     http::{HeaderMap, HeaderValue, StatusCode},
     middleware::Next,
@@ -58,8 +57,7 @@ impl RateLimitMiddleware {
                 if !result.allowed {
                     warn!(
                         "Rate limit exceeded for dimension {:?}, identifier: {}",
-                        config.dimension,
-                        key.identifier
+                        config.dimension, key.identifier
                     );
 
                     return Err(create_rate_limit_response(
@@ -94,12 +92,12 @@ impl RateLimitMiddleware {
                 RateLimitDimension::Ip,
                 client_ip.to_string(),
             )),
-            RateLimitDimension::User => user_id.map(|id| {
-                RateLimitKey::new(RateLimitDimension::User, id.to_string())
-            }),
-            RateLimitDimension::ApiKey => api_key.map(|key| {
-                RateLimitKey::new(RateLimitDimension::ApiKey, key.to_string())
-            }),
+            RateLimitDimension::User => {
+                user_id.map(|id| RateLimitKey::new(RateLimitDimension::User, id.to_string()))
+            }
+            RateLimitDimension::ApiKey => {
+                api_key.map(|key| RateLimitKey::new(RateLimitDimension::ApiKey, key.to_string()))
+            }
             RateLimitDimension::Route => Some(RateLimitKey::with_route(
                 RateLimitDimension::Route,
                 client_ip.to_string(),
@@ -161,10 +159,7 @@ pub async fn rate_limit_middleware(
     request.extensions_mut().insert(ConnectInfo(addr));
 
     // Extract user ID from request extensions (set by auth middleware)
-    let user_id = request
-        .extensions()
-        .get::<String>()
-        .map(|s| s.to_string());
+    let user_id = request.extensions().get::<String>().map(|s| s.to_string());
 
     // Extract API key from headers
     let api_key = headers
@@ -173,10 +168,7 @@ pub async fn rate_limit_middleware(
         .map(|s| s.to_string());
 
     // Get rate limiter from request extensions and clone it
-    let rate_limiter = request
-        .extensions()
-        .get::<RateLimitMiddleware>()
-        .cloned();
+    let rate_limiter = request.extensions().get::<RateLimitMiddleware>().cloned();
 
     if let Some(limiter) = rate_limiter {
         match limiter.apply(request, user_id, api_key).await {

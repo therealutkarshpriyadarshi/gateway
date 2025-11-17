@@ -1,6 +1,6 @@
 use super::types::{CircuitBreakerConfig, CircuitBreakerMetrics, CircuitState};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
@@ -254,13 +254,11 @@ impl CircuitBreaker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     #[tokio::test]
     async fn test_circuit_breaker_starts_closed() {
-        let cb = CircuitBreaker::new(
-            "test-backend".to_string(),
-            CircuitBreakerConfig::default(),
-        );
+        let cb = CircuitBreaker::new("test-backend".to_string(), CircuitBreakerConfig::default());
         assert_eq!(cb.state().await, CircuitState::Closed);
         assert!(cb.can_proceed().await);
     }

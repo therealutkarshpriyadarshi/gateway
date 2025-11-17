@@ -2,6 +2,8 @@ pub mod auth;
 pub mod circuit_breaker;
 pub mod config;
 pub mod error;
+pub mod healthcheck;
+pub mod loadbalancer;
 pub mod proxy;
 pub mod rate_limit;
 pub mod router;
@@ -92,13 +94,17 @@ pub async fn init_gateway(config: GatewayConfig) -> Result<()> {
     let addr = format!("{}:{}", config.server.host, config.server.port);
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
-        .map_err(|e| crate::error::GatewayError::Io(e))?;
+        .map_err(crate::error::GatewayError::Io)?;
 
     info!("Gateway ready to accept connections");
 
-    axum::serve(listener, app)
-        .await
-        .map_err(|e| crate::error::GatewayError::Internal(format!("Server error: {}", e)))?;
+    // Use make_service_with_connect_info to extract client IP
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await
+    .map_err(|e| crate::error::GatewayError::Internal(format!("Server error: {}", e)))?;
 
     Ok(())
 }

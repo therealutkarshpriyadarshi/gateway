@@ -53,32 +53,44 @@ async fn setup_test_gateway() -> (ProxyState, MockServer) {
     let routes = vec![
         RouteConfig {
             path: "/api/users".to_string(),
-            backend: mock_server.uri(),
+            backend: Some(mock_server.uri()),
+            backends: vec![],
+            load_balancer: None,
+            health_check: None,
             methods: vec!["GET".to_string(), "POST".to_string()],
             strip_prefix: false,
             description: "User service".to_string(),
             auth: None,
+            rate_limit: None,
         },
         RouteConfig {
             path: "/api/users/:id".to_string(),
-            backend: mock_server.uri(),
+            backend: Some(mock_server.uri()),
+            backends: vec![],
+            load_balancer: None,
+            health_check: None,
             methods: vec!["GET".to_string()],
             strip_prefix: false,
             description: "Get user by ID".to_string(),
             auth: None,
+            rate_limit: None,
         },
         RouteConfig {
             path: "/health".to_string(),
-            backend: mock_server.uri(),
+            backend: Some(mock_server.uri()),
+            backends: vec![],
+            load_balancer: None,
+            health_check: None,
             methods: vec![],
             strip_prefix: false,
             description: "Health check".to_string(),
             auth: None,
+            rate_limit: None,
         },
     ];
 
     let router = GatewayRouter::new(routes).unwrap();
-    let proxy_state = ProxyState::new(router, Duration::from_secs(30), None);
+    let proxy_state = ProxyState::new(router, Duration::from_secs(30), None, None, None);
 
     (proxy_state, mock_server)
 }
@@ -247,17 +259,22 @@ async fn test_health_check() {
 fn test_config_validation() {
     let config = GatewayConfig {
         server: ServerConfig::default(),
-        routes: vec![
-            RouteConfig {
-                path: "/api/test".to_string(),
-                backend: "http://localhost:3000".to_string(),
-                methods: vec!["GET".to_string()],
-                strip_prefix: false,
-                description: "Test route".to_string(),
-                auth: None,
-            },
-        ],
+        routes: vec![RouteConfig {
+            path: "/api/test".to_string(),
+            backend: Some("http://localhost:3000".to_string()),
+            backends: vec![],
+            load_balancer: None,
+            health_check: None,
+            methods: vec!["GET".to_string()],
+            strip_prefix: false,
+            description: "Test route".to_string(),
+            auth: None,
+            rate_limit: None,
+        }],
         auth: None,
+        rate_limiting: None,
+        circuit_breaker: None,
+        retry: None,
     };
 
     assert!(config.validate().is_ok());
@@ -267,17 +284,22 @@ fn test_config_validation() {
 fn test_config_invalid_backend() {
     let config = GatewayConfig {
         server: ServerConfig::default(),
-        routes: vec![
-            RouteConfig {
-                path: "/api/test".to_string(),
-                backend: "invalid-url".to_string(),
-                methods: vec!["GET".to_string()],
-                strip_prefix: false,
-                description: "Test route".to_string(),
-                auth: None,
-            },
-        ],
+        routes: vec![RouteConfig {
+            path: "/api/test".to_string(),
+            backend: Some("invalid-url".to_string()),
+            backends: vec![],
+            load_balancer: None,
+            health_check: None,
+            methods: vec!["GET".to_string()],
+            strip_prefix: false,
+            description: "Test route".to_string(),
+            auth: None,
+            rate_limit: None,
+        }],
         auth: None,
+        rate_limiting: None,
+        circuit_breaker: None,
+        retry: None,
     };
 
     assert!(config.validate().is_err());

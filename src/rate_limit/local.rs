@@ -1,7 +1,7 @@
 use super::types::{RateLimitConfig, RateLimitKey, RateLimitResult};
 use dashmap::DashMap;
 use governor::{
-    clock::{Clock, DefaultClock},
+    clock::DefaultClock,
     state::{InMemoryState, NotKeyed},
     Quota, RateLimiter as GovernorRateLimiter,
 };
@@ -13,6 +13,7 @@ use tracing::{debug, warn};
 /// Local (in-memory) rate limiter using token bucket algorithm
 pub struct LocalRateLimiter {
     /// Map of rate limiters per key
+    #[allow(clippy::type_complexity)]
     limiters: Arc<DashMap<String, Arc<GovernorRateLimiter<NotKeyed, InMemoryState, DefaultClock>>>>,
     /// Default configuration
     config: RateLimitConfig,
@@ -114,8 +115,7 @@ mod tests {
             assert!(
                 result.allowed,
                 "Request {} should be allowed (remaining: {})",
-                i,
-                result.remaining
+                i, result.remaining
             );
         }
     }

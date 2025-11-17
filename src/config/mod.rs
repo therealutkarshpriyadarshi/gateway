@@ -1,6 +1,8 @@
 use crate::circuit_breaker::types::{CircuitBreakerConfig, RetryConfig};
 use crate::error::{GatewayError, Result};
-use crate::rate_limit::types::{RateLimitConfig, RateLimitDimension};
+use crate::healthcheck::HealthCheckConfig;
+use crate::loadbalancer::backend::BackendConfig;
+use crate::rate_limit::types::RateLimitConfig;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -44,8 +46,18 @@ pub struct ServerConfig {
 pub struct RouteConfig {
     /// Route path pattern (e.g., "/api/users/:id")
     pub path: String,
-    /// Backend service URL
-    pub backend: String,
+    /// Backend service URL (for single backend, backward compatibility)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backend: Option<String>,
+    /// Multiple backend configurations (for load balancing)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub backends: Vec<BackendConfig>,
+    /// Load balancer configuration
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub load_balancer: Option<LoadBalancerConfig>,
+    /// Health check configuration
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health_check: Option<HealthCheckConfig>,
     /// Allowed HTTP methods (if empty, all methods allowed)
     #[serde(default)]
     pub methods: Vec<String>,
@@ -61,6 +73,18 @@ pub struct RouteConfig {
     /// Rate limiting for this route
     #[serde(default)]
     pub rate_limit: Option<Vec<RateLimitConfig>>,
+}
+
+/// Load balancer configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoadBalancerConfig {
+    /// Strategy: round_robin, least_connections, weighted, ip_hash
+    #[serde(default = "default_strategy")]
+    pub strategy: String,
+}
+
+fn default_strategy() -> String {
+    "round_robin".to_string()
 }
 
 /// Authentication configuration for a route
@@ -195,6 +219,35 @@ impl Default for ServerConfig {
     }
 }
 
+impl RouteConfig {
+    /// Get backend configurations for this route
+    pub fn get_backends(&self) -> Result<Vec<BackendConfig>> {
+        // If backends array is provided, use it
+        if !self.backends.is_empty() {
+            return Ok(self.backends.clone());
+        }
+
+        // Otherwise, use the single backend field (for backward compatibility)
+        if let Some(backend) = &self.backend {
+            return Ok(vec![BackendConfig {
+                url: backend.clone(),
+                weight: 1,
+            }]);
+        }
+
+        // No backends configured
+        Err(GatewayError::InvalidRoute(format!(
+            "No backend configured for route: {}",
+            self.path
+        )))
+    }
+
+    /// Check if this route uses load balancing
+    pub fn uses_load_balancing(&self) -> bool {
+        self.backends.len() > 1
+    }
+}
+
 impl GatewayConfig {
     /// Load configuration from a YAML file
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
@@ -220,19 +273,26 @@ impl GatewayConfig {
                 ));
             }
 
-            if route.backend.is_empty() {
-                return Err(GatewayError::InvalidRoute(format!(
-                    "Backend URL cannot be empty for route: {}",
-                    route.path
-                )));
-            }
+            // Get backends for validation
+            let backends = route.get_backends()?;
 
-            // Validate backend URL
-            if !route.backend.starts_with("http://") && !route.backend.starts_with("https://") {
-                return Err(GatewayError::InvalidRoute(format!(
-                    "Backend URL must start with http:// or https:// for route: {}",
-                    route.path
-                )));
+            // Validate each backend URL
+            for backend_config in &backends {
+                if backend_config.url.is_empty() {
+                    return Err(GatewayError::InvalidRoute(format!(
+                        "Backend URL cannot be empty for route: {}",
+                        route.path
+                    )));
+                }
+
+                if !backend_config.url.starts_with("http://")
+                    && !backend_config.url.starts_with("https://")
+                {
+                    return Err(GatewayError::InvalidRoute(format!(
+                        "Backend URL must start with http:// or https:// for route: {}",
+                        route.path
+                    )));
+                }
             }
 
             // Validate methods
@@ -328,7 +388,7 @@ routes:
         assert_eq!(config.routes.len(), 2);
         assert_eq!(config.routes[0].path, "/api/users");
         assert_eq!(config.routes[0].methods, vec!["GET", "POST"]);
-        assert_eq!(config.routes[1].strip_prefix, true);
+        assert!(config.routes[1].strip_prefix);
     }
 
     #[test]
@@ -350,7 +410,10 @@ routes: []
             server: ServerConfig::default(),
             routes: vec![RouteConfig {
                 path: "".to_string(),
-                backend: "http://localhost:3000".to_string(),
+                backend: Some("http://localhost:3000".to_string()),
+                backends: vec![],
+                load_balancer: None,
+                health_check: None,
                 methods: vec![],
                 strip_prefix: false,
                 description: "".to_string(),
@@ -372,7 +435,10 @@ routes: []
             server: ServerConfig::default(),
             routes: vec![RouteConfig {
                 path: "/api/test".to_string(),
-                backend: "invalid-url".to_string(),
+                backend: Some("invalid-url".to_string()),
+                backends: vec![],
+                load_balancer: None,
+                health_check: None,
                 methods: vec![],
                 strip_prefix: false,
                 description: "".to_string(),
@@ -394,7 +460,10 @@ routes: []
             server: ServerConfig::default(),
             routes: vec![RouteConfig {
                 path: "/api/test".to_string(),
-                backend: "http://localhost:3000".to_string(),
+                backend: Some("http://localhost:3000".to_string()),
+                backends: vec![],
+                load_balancer: None,
+                health_check: None,
                 methods: vec!["INVALID".to_string()],
                 strip_prefix: false,
                 description: "".to_string(),
@@ -416,7 +485,10 @@ routes: []
             server: ServerConfig::default(),
             routes: vec![RouteConfig {
                 path: "/api/test".to_string(),
-                backend: "http://localhost:3000".to_string(),
+                backend: Some("http://localhost:3000".to_string()),
+                backends: vec![],
+                load_balancer: None,
+                health_check: None,
                 methods: vec!["GET".to_string(), "POST".to_string()],
                 strip_prefix: false,
                 description: "Test route".to_string(),
@@ -430,6 +502,86 @@ routes: []
         };
 
         assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_load_balancer_config() {
+        let yaml = r#"
+server:
+  host: "127.0.0.1"
+  port: 8080
+
+routes:
+  - path: "/api/test"
+    backends:
+      - url: "http://localhost:3000"
+        weight: 2
+      - url: "http://localhost:3001"
+        weight: 1
+    load_balancer:
+      strategy: "weighted"
+    health_check:
+      enabled: true
+      interval_secs: 10
+      path: "/health"
+"#;
+
+        let config = GatewayConfig::from_yaml(yaml).unwrap();
+        assert_eq!(config.routes.len(), 1);
+        assert_eq!(config.routes[0].backends.len(), 2);
+        assert!(config.routes[0].load_balancer.is_some());
+        assert!(config.routes[0].health_check.is_some());
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_get_backends_from_single_backend() {
+        let route = RouteConfig {
+            path: "/test".to_string(),
+            backend: Some("http://localhost:3000".to_string()),
+            backends: vec![],
+            load_balancer: None,
+            health_check: None,
+            methods: vec![],
+            strip_prefix: false,
+            description: "".to_string(),
+            auth: None,
+            rate_limit: None,
+        };
+
+        let backends = route.get_backends().unwrap();
+        assert_eq!(backends.len(), 1);
+        assert_eq!(backends[0].url, "http://localhost:3000");
+    }
+
+    #[test]
+    fn test_get_backends_from_multiple_backends() {
+        let route = RouteConfig {
+            path: "/test".to_string(),
+            backend: None,
+            backends: vec![
+                BackendConfig {
+                    url: "http://localhost:3000".to_string(),
+                    weight: 1,
+                },
+                BackendConfig {
+                    url: "http://localhost:3001".to_string(),
+                    weight: 2,
+                },
+            ],
+            load_balancer: None,
+            health_check: None,
+            methods: vec![],
+            strip_prefix: false,
+            description: "".to_string(),
+            auth: None,
+            rate_limit: None,
+        };
+
+        let backends = route.get_backends().unwrap();
+        assert_eq!(backends.len(), 2);
+        assert_eq!(backends[0].url, "http://localhost:3000");
+        assert_eq!(backends[1].url, "http://localhost:3001");
     }
 
     #[test]
