@@ -1,0 +1,32 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+  timeout_secs: 30
+
+# Global authentication configuration with RS256 (asymmetric encryption)
+auth:
+  jwt:
+    # Public key for RS256 verification
+    # In production, load this from a file or environment variable
+    public_key: |
+      -----BEGIN PUBLIC KEY-----
+      MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Z3VS5JJcds3xfn/ygWe
+      rBfSZKmTSl5Dkxv5w7l2vLJDfmqUBPnkKrAnpWgJhWfMQ7M1kHXxPTLBm/RZW8WM
+      KnQ/9IlxWGBPiM5lYYQl7lVF8fYNV9IqBKPPJTJC3xWJLvQS3T5Y3M2KlJmEF2Bz
+      Y6l5iKP3XQVxLTb/VxMDqWVQ3xPGvKJYwE6qLt6mVQWL0PvS1JYmFbPvQVYwqJTv
+      8L6XL2KqxqJPxqKEBvlTqFJYPQvTxQVLQ7FJKfQl6Y+GvLQ3xJKP7LFvQK8xJQPv
+      9LQxFKJPvTxQL6Y+GvL2KqxqJPxqKEBvlTqFJYPQvTxQVLQ7FJKfQl6Y+GvLQx3J
+      KQIDAQAB
+      -----END PUBLIC KEY-----
+    algorithm: "RS256"
+    issuer: "https://your-auth-server.com"
+    audience: "https://your-api.com"
+
+routes:
+  - path: "/api/secure"
+    backend: "http://localhost:3000"
+    methods: ["GET", "POST"]
+    description: "Secure API with RS256 JWT"
+    auth:
+      required: true
+      methods: ["jwt"]

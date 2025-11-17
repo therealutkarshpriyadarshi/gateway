@@ -57,6 +57,7 @@ async fn setup_test_gateway() -> (ProxyState, MockServer) {
             methods: vec!["GET".to_string(), "POST".to_string()],
             strip_prefix: false,
             description: "User service".to_string(),
+            auth: None,
         },
         RouteConfig {
             path: "/api/users/:id".to_string(),
@@ -64,6 +65,7 @@ async fn setup_test_gateway() -> (ProxyState, MockServer) {
             methods: vec!["GET".to_string()],
             strip_prefix: false,
             description: "Get user by ID".to_string(),
+            auth: None,
         },
         RouteConfig {
             path: "/health".to_string(),
@@ -71,11 +73,12 @@ async fn setup_test_gateway() -> (ProxyState, MockServer) {
             methods: vec![],
             strip_prefix: false,
             description: "Health check".to_string(),
+            auth: None,
         },
     ];
 
     let router = GatewayRouter::new(routes).unwrap();
-    let proxy_state = ProxyState::new(router, Duration::from_secs(30));
+    let proxy_state = ProxyState::new(router, Duration::from_secs(30), None);
 
     (proxy_state, mock_server)
 }
@@ -251,8 +254,10 @@ fn test_config_validation() {
                 methods: vec!["GET".to_string()],
                 strip_prefix: false,
                 description: "Test route".to_string(),
+                auth: None,
             },
         ],
+        auth: None,
     };
 
     assert!(config.validate().is_ok());
@@ -269,8 +274,10 @@ fn test_config_invalid_backend() {
                 methods: vec!["GET".to_string()],
                 strip_prefix: false,
                 description: "Test route".to_string(),
+                auth: None,
             },
         ],
+        auth: None,
     };
 
     assert!(config.validate().is_err());

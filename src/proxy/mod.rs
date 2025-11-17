@@ -1,3 +1,4 @@
+use crate::auth::AuthService;
 use crate::error::{GatewayError, Result};
 use crate::router::Router;
 use axum::{
@@ -9,18 +10,19 @@ use axum::{
 use http_body_util::BodyExt;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 /// Proxy handler state
 #[derive(Clone)]
 pub struct ProxyState {
     pub router: Arc<Router>,
     pub client: reqwest::Client,
+    pub auth_service: Option<Arc<AuthService>>,
 }
 
 impl ProxyState {
     /// Create a new proxy state
-    pub fn new(router: Router, timeout: Duration) -> Self {
+    pub fn new(router: Router, timeout: Duration, auth_service: Option<AuthService>) -> Self {
         let client = reqwest::Client::builder()
             .timeout(timeout)
             .build()
@@ -29,6 +31,7 @@ impl ProxyState {
         Self {
             router: Arc::new(router),
             client,
+            auth_service: auth_service.map(Arc::new),
         }
     }
 }
@@ -49,6 +52,11 @@ pub async fn proxy_handler(
         "Incoming request"
     );
 
+    // Check for health check bypass
+    if is_health_check_path(path) {
+        debug!("Health check path detected, bypassing authentication");
+    }
+
     // Match the route
     let route_match = state.router.match_route(path, &method)?;
 
@@ -57,6 +65,34 @@ pub async fn proxy_handler(
         params = ?route_match.params,
         "Route matched"
     );
+
+    // Perform authentication if required and not a health check
+    if !is_health_check_path(path) {
+        if let Some(route_auth) = &route_match.route.auth {
+            if route_auth.required {
+                if let Some(auth_service) = &state.auth_service {
+                    let headers = req.headers();
+                    match auth_service.authenticate(headers, route_auth).await {
+                        Ok(auth_result) => {
+                            info!(
+                                user_id = %auth_result.user_id,
+                                method = ?auth_result.method,
+                                "Authentication successful"
+                            );
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "Authentication failed");
+                            return Err(e);
+                        }
+                    }
+                } else {
+                    return Err(GatewayError::Config(
+                        "Authentication required but no auth service configured".to_string(),
+                    ));
+                }
+            }
+        }
+    }
 
     // Build backend URL
     let mut backend_url = route_match.build_backend_url(path);
@@ -164,6 +200,11 @@ fn is_hop_by_hop_header(name: &str) -> bool {
     )
 }
 
+/// Check if a path is a health check endpoint that should bypass authentication
+fn is_health_check_path(path: &str) -> bool {
+    matches!(path, "/health" | "/healthz" | "/ready" | "/readiness" | "/ping")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -188,11 +229,23 @@ mod tests {
             methods: vec![],
             strip_prefix: false,
             description: "".to_string(),
+            auth: None,
         }];
 
         let _router = Router::new(routes).unwrap();
-        let _state = ProxyState::new(_router, Duration::from_secs(30));
+        let _state = ProxyState::new(_router, Duration::from_secs(30), None);
 
         // State created successfully - just testing that creation doesn't panic
+    }
+
+    #[test]
+    fn test_is_health_check_path() {
+        assert!(is_health_check_path("/health"));
+        assert!(is_health_check_path("/healthz"));
+        assert!(is_health_check_path("/ready"));
+        assert!(is_health_check_path("/readiness"));
+        assert!(is_health_check_path("/ping"));
+        assert!(!is_health_check_path("/api/users"));
+        assert!(!is_health_check_path("/healthy"));
     }
 }

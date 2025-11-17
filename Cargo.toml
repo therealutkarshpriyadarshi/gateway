@@ -43,11 +43,18 @@ config = "0.14"
 async-trait = "0.1"
 futures = "0.3"
 
+# Authentication
+jsonwebtoken = "9.3"
+base64 = "0.22"
+redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
+sha2 = "0.10"
+
 [dev-dependencies]
 # Testing
 tokio-test = "0.4"
 wiremock = "0.6"
 assert-json-diff = "2.0"
+chrono = "0.4"
 
 [profile.release]
 opt-level = 3

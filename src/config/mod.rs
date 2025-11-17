@@ -9,6 +9,9 @@ pub struct GatewayConfig {
     pub server: ServerConfig,
     /// Route definitions
     pub routes: Vec<RouteConfig>,
+    /// Authentication configuration
+    #[serde(default)]
+    pub auth: Option<AuthConfig>,
 }
 
 /// Server configuration
@@ -41,6 +44,92 @@ pub struct RouteConfig {
     /// Route description
     #[serde(default)]
     pub description: String,
+    /// Authentication requirement for this route
+    #[serde(default)]
+    pub auth: Option<RouteAuthConfig>,
+}
+
+/// Authentication configuration for a route
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteAuthConfig {
+    /// Whether authentication is required
+    #[serde(default = "default_true")]
+    pub required: bool,
+    /// Allowed authentication methods
+    #[serde(default)]
+    pub methods: Vec<AuthMethod>,
+}
+
+/// Authentication method types
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum AuthMethod {
+    Jwt,
+    ApiKey,
+}
+
+/// Global authentication configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthConfig {
+    /// JWT configuration
+    pub jwt: Option<JwtConfig>,
+    /// API key configuration
+    pub api_key: Option<ApiKeyConfig>,
+}
+
+/// JWT authentication configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JwtConfig {
+    /// Secret key for HS256 (if using symmetric encryption)
+    pub secret: Option<String>,
+    /// Public key for RS256 (if using asymmetric encryption)
+    pub public_key: Option<String>,
+    /// Algorithm to use (HS256 or RS256)
+    #[serde(default = "default_jwt_algorithm")]
+    pub algorithm: String,
+    /// Issuer to validate
+    pub issuer: Option<String>,
+    /// Audience to validate
+    pub audience: Option<String>,
+}
+
+/// API key configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKeyConfig {
+    /// Header name for API key
+    #[serde(default = "default_api_key_header")]
+    pub header: String,
+    /// In-memory API keys (key -> description)
+    #[serde(default)]
+    pub keys: std::collections::HashMap<String, String>,
+    /// Redis configuration for distributed key storage
+    pub redis: Option<RedisConfig>,
+}
+
+/// Redis configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RedisConfig {
+    /// Redis connection URL
+    pub url: String,
+    /// Key prefix for API keys
+    #[serde(default = "default_redis_prefix")]
+    pub prefix: String,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_jwt_algorithm() -> String {
+    "HS256".to_string()
+}
+
+fn default_api_key_header() -> String {
+    "X-API-Key".to_string()
+}
+
+fn default_redis_prefix() -> String {
+    "gateway:apikey:".to_string()
 }
 
 fn default_host() -> String {
@@ -127,6 +216,7 @@ impl GatewayConfig {
         Self {
             server: ServerConfig::default(),
             routes: vec![],
+            auth: None,
         }
     }
 }
@@ -186,7 +276,9 @@ routes: []
                 methods: vec![],
                 strip_prefix: false,
                 description: "".to_string(),
+                auth: None,
             }],
+            auth: None,
         };
 
         assert!(config.validate().is_err());
@@ -202,7 +294,9 @@ routes: []
                 methods: vec![],
                 strip_prefix: false,
                 description: "".to_string(),
+                auth: None,
             }],
+            auth: None,
         };
 
         assert!(config.validate().is_err());
@@ -218,7 +312,9 @@ routes: []
                 methods: vec!["INVALID".to_string()],
                 strip_prefix: false,
                 description: "".to_string(),
+                auth: None,
             }],
+            auth: None,
         };
 
         assert!(config.validate().is_err());
@@ -234,7 +330,9 @@ routes: []
                 methods: vec!["GET".to_string(), "POST".to_string()],
                 strip_prefix: false,
                 description: "Test route".to_string(),
+                auth: None,
             }],
+            auth: None,
         };
 
         assert!(config.validate().is_ok());

@@ -1,4 +1,4 @@
-use crate::config::RouteConfig;
+use crate::config::{RouteAuthConfig, RouteConfig};
 use crate::error::{GatewayError, Result};
 use http::Method;
 use matchit::Router as MatchitRouter;
@@ -15,6 +15,8 @@ pub struct Route {
     pub strip_prefix: bool,
     /// Route description
     pub description: String,
+    /// Authentication configuration
+    pub auth: Option<RouteAuthConfig>,
 }
 
 /// Gateway router for matching incoming requests to backend services
@@ -48,6 +50,7 @@ impl Router {
                 methods,
                 strip_prefix: route_config.strip_prefix,
                 description: route_config.description,
+                auth: route_config.auth,
             };
 
             // Convert path syntax from :param to {param} and *path to {*path}
@@ -183,6 +186,7 @@ mod tests {
                 methods: vec!["GET".to_string(), "POST".to_string()],
                 strip_prefix: false,
                 description: "User service".to_string(),
+                auth: None,
             },
             RouteConfig {
                 path: "/api/orders/:id".to_string(),
@@ -190,6 +194,7 @@ mod tests {
                 methods: vec![],
                 strip_prefix: false,
                 description: "Order service".to_string(),
+                auth: None,
             },
             RouteConfig {
                 path: "/v1/products/*path".to_string(),
@@ -197,6 +202,7 @@ mod tests {
                 methods: vec!["GET".to_string()],
                 strip_prefix: true,
                 description: "Product service".to_string(),
+                auth: None,
             },
         ]
     }
@@ -278,6 +284,7 @@ mod tests {
                 methods: vec![],
                 strip_prefix: false,
                 description: "".to_string(),
+                auth: None,
             },
             params: HashMap::new(),
             matched_path: "/api/users".to_string(),
@@ -295,6 +302,7 @@ mod tests {
                 methods: vec![],
                 strip_prefix: true,
                 description: "".to_string(),
+                auth: None,
             },
             params: HashMap::new(),
             matched_path: "/v1/products".to_string(),
@@ -312,6 +320,7 @@ mod tests {
             methods: vec![], // Empty means all methods allowed
             strip_prefix: false,
             description: "".to_string(),
+            auth: None,
         }];
 
         let router = Router::new(routes).unwrap();
