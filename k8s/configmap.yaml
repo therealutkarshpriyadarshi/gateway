@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-config
+  namespace: gateway
+  labels:
+    app: api-gateway
+data:
+  gateway.yaml: |
+    server:
+      host: "0.0.0.0"
+      port: 8080
+      timeout_secs: 30
+
+    # Example routes - customize for your environment
+    routes:
+      - path: "/api/users/*path"
+        backend: "http://user-service:3000"
+        methods: ["GET", "POST", "PUT", "DELETE"]
+        description: "User service"
+        auth:
+          required: true
+          methods: ["jwt"]
+
+      - path: "/api/orders/*path"
+        backend: "http://order-service:3001"
+        methods: ["GET", "POST"]
+        description: "Order service"
+        auth:
+          required: true
+          methods: ["jwt", "apikey"]
+
+      - path: "/health"
+        backend: "http://localhost:8080"
+        description: "Health check endpoint"
+
+    # Authentication configuration
+    auth:
+      jwt:
+        # Use secret reference for production
+        secret: "secret://jwt_secret"
+        algorithm: "HS256"
+      api_key:
+        header: "X-API-Key"
+        keys:
+          # Static keys for development only
+          # Use Redis in production
+        redis:
+          url: "redis://redis-service:6379"
+          prefix: "gateway:apikey:"
+
+    # Rate limiting
+    rate_limiting:
+      enabled: true
+      backend: "redis"
+      redis:
+        url: "redis://redis-service:6379"
+        prefix: "ratelimit:"
+      limits:
+        - dimension: "ip"
+          rate: 1000
+          per: 60
+        - dimension: "user"
+          rate: 10000
+          per: 60
+
+    # Circuit breaker
+    circuit_breaker:
+      failure_threshold: 5
+      success_threshold: 2
+      timeout_secs: 60
+      half_open_max_requests: 3
+
+    # Retry configuration
+    retry:
+      max_retries: 3
+      initial_backoff_ms: 100
+      max_backoff_ms: 5000
+      backoff_multiplier: 2.0
+
+    # Observability
+    observability:
+      metrics:
+        enabled: true
+        path: "/metrics"
+      tracing:
+        enabled: true
+        otlp_endpoint: "http://jaeger-collector:4317"
+        service_name: "api-gateway"
+        service_version: "0.1.0"
+        sample_rate: 1.0

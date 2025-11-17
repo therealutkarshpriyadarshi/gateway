@@ -1,0 +1,19 @@
+apiVersion: v2
+name: api-gateway
+description: A production-grade API Gateway built in Rust
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - gateway
+  - api
+  - proxy
+  - microservices
+  - rust
+home: https://github.com/therealutkarshpriyadarshi/gateway
+sources:
+  - https://github.com/therealutkarshpriyadarshi/gateway
+maintainers:
+  - name: Gateway Contributors
+    email: maintainers@example.com
+icon: https://raw.githubusercontent.com/therealutkarshpriyadarshi/gateway/main/docs/logo.png

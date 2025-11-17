@@ -7,6 +7,7 @@ use crate::hotreload::HotReloadConfig;
 use crate::ipfilter::IpFilterConfig;
 use crate::loadbalancer::backend::BackendConfig;
 use crate::rate_limit::types::RateLimitConfig;
+use crate::tls::TlsConfig;
 use crate::transform::TransformConfig;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -48,6 +49,9 @@ pub struct GatewayConfig {
     /// Request size limit in bytes
     #[serde(default)]
     pub max_request_size: Option<usize>,
+    /// TLS/mTLS configuration
+    #[serde(default)]
+    pub tls: Option<TlsConfig>,
 }
 
 /// Server configuration
@@ -458,6 +462,7 @@ impl GatewayConfig {
             ip_filter: None,
             cache: None,
             max_request_size: None,
+            tls: None,
         }
     }
 }

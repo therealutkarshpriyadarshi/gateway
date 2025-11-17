@@ -1,0 +1,39 @@
+# Git files
+.git
+.gitignore
+.github
+
+# Build artifacts
+target/
+*.log
+
+# Documentation
+*.md
+docs/
+examples/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test files
+tests/
+benches/
+
+# CI/CD
+.github/
+
+# Docker files
+Dockerfile*
+.dockerignore
+
+# Kubernetes files
+k8s/
+helm/
+
+# Temporary files
+tmp/
+*.tmp

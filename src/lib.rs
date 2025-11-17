@@ -13,6 +13,8 @@ pub mod observability;
 pub mod proxy;
 pub mod rate_limit;
 pub mod router;
+pub mod secrets;
+pub mod tls;
 pub mod transform;
 
 use crate::config::GatewayConfig;
@@ -22,6 +24,8 @@ use crate::observability::{request_id_middleware, TracingConfig};
 use crate::proxy::{proxy_handler, ProxyState};
 use crate::router::Router;
 use axum::{middleware, routing::any, routing::get, Router as AxumRouter};
+use std::net::SocketAddr;
+use std::str::FromStr;
 use std::time::Duration;
 use tower_http::trace::TraceLayer;
 use tracing::info;
@@ -132,19 +136,38 @@ pub async fn init_gateway(config: GatewayConfig) -> Result<()> {
 
     // Bind and serve
     let addr = format!("{}:{}", config.server.host, config.server.port);
-    let listener = tokio::net::TcpListener::bind(&addr)
+
+    // Check if TLS is configured
+    if let Some(tls_config) = config.tls {
+        info!("TLS enabled, starting HTTPS server");
+        let tls_server_config = tls::build_tls_config(&tls_config)?;
+        let rustls_config = std::sync::Arc::new(tls_server_config);
+
+        info!("Gateway ready to accept TLS connections on {}", addr);
+
+        axum_server::bind_rustls(
+            SocketAddr::from_str(&addr).unwrap(),
+            axum_server::tls_rustls::RustlsConfig::from_config(rustls_config),
+        )
+            .serve(app.into_make_service_with_connect_info::<std::net::SocketAddr>())
+            .await
+            .map_err(|e| crate::error::GatewayError::Internal(format!("TLS server error: {}", e)))?;
+    } else {
+        info!("TLS not configured, starting HTTP server");
+        let listener = tokio::net::TcpListener::bind(&addr)
+            .await
+            .map_err(crate::error::GatewayError::Io)?;
+
+        info!("Gateway ready to accept connections on {}", addr);
+
+        // Use make_service_with_connect_info to extract client IP
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
         .await
-        .map_err(crate::error::GatewayError::Io)?;
-
-    info!("Gateway ready to accept connections");
-
-    // Use make_service_with_connect_info to extract client IP
-    axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
-    )
-    .await
-    .map_err(|e| crate::error::GatewayError::Internal(format!("Server error: {}", e)))?;
+        .map_err(|e| crate::error::GatewayError::Internal(format!("Server error: {}", e)))?;
+    }
 
     Ok(())
 }
