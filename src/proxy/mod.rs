@@ -1,12 +1,14 @@
 use crate::auth::AuthService;
+use crate::circuit_breaker::{CircuitBreakerService, RetryExecutor};
 use crate::error::{GatewayError, Result};
 use crate::router::Router;
 use axum::{
     body::Body,
     extract::State,
-    http::{Request, Response},
+    http::{HeaderMap, Method, Request, Response},
     response::IntoResponse,
 };
+use bytes::Bytes;
 use http_body_util::BodyExt;
 use std::sync::Arc;
 use std::time::Duration;
@@ -18,11 +20,19 @@ pub struct ProxyState {
     pub router: Arc<Router>,
     pub client: reqwest::Client,
     pub auth_service: Option<Arc<AuthService>>,
+    pub circuit_breaker: Option<Arc<CircuitBreakerService>>,
+    pub retry_executor: Option<Arc<RetryExecutor>>,
 }
 
 impl ProxyState {
     /// Create a new proxy state
-    pub fn new(router: Router, timeout: Duration, auth_service: Option<AuthService>) -> Self {
+    pub fn new(
+        router: Router,
+        timeout: Duration,
+        auth_service: Option<AuthService>,
+        circuit_breaker: Option<CircuitBreakerService>,
+        retry_executor: Option<RetryExecutor>,
+    ) -> Self {
         let client = reqwest::Client::builder()
             .timeout(timeout)
             .build()
@@ -32,11 +42,14 @@ impl ProxyState {
             router: Arc::new(router),
             client,
             auth_service: auth_service.map(Arc::new),
+            circuit_breaker: circuit_breaker.map(Arc::new),
+            retry_executor: retry_executor.map(Arc::new),
         }
     }
 }
 
 /// Main proxy handler that forwards requests to backend services
+#[axum::debug_handler]
 pub async fn proxy_handler(
     State(state): State<ProxyState>,
     req: Request<Body>,
@@ -103,28 +116,22 @@ pub async fn proxy_handler(
 
     debug!(backend_url = %backend_url, "Forwarding to backend");
 
-    // Forward the request
-    let response = forward_request(state.client, req, &backend_url).await?;
+    let backend = &route_match.route.backend;
 
-    info!(
-        status = %response.status(),
-        backend = %route_match.route.backend,
-        "Request completed"
-    );
+    // Check circuit breaker
+    if let Some(circuit_breaker) = &state.circuit_breaker {
+        if !circuit_breaker.can_proceed(backend).await {
+            warn!(backend = %backend, "Circuit breaker open, rejecting request");
+            return Err(GatewayError::CircuitBreakerOpen(format!(
+                "Circuit breaker is open for backend: {}",
+                backend
+            )));
+        }
+    }
 
-    Ok(response)
-}
-
-/// Forward the request to the backend service
-async fn forward_request(
-    client: reqwest::Client,
-    req: Request<Body>,
-    backend_url: &str,
-) -> Result<Response<Body>> {
-    let method = req.method().clone();
-    let headers = req.headers().clone();
-
-    // Collect the body
+    // Collect request body and headers for potential retries
+    let method_for_request = req.method().clone();
+    let headers_for_request = req.headers().clone();
     let body_bytes = req
         .into_body()
         .collect()
@@ -132,6 +139,89 @@ async fn forward_request(
         .map_err(|e| GatewayError::Proxy(format!("Failed to read request body: {}", e)))?
         .to_bytes();
 
+    // Forward the request with retry logic if configured
+    let response: Result<Response<Body>> = if let Some(retry_executor) = &state.retry_executor {
+        let client = state.client.clone();
+        let backend_url_clone = backend_url.clone();
+        let method_clone = method_for_request.clone();
+        let headers_clone = headers_for_request.clone();
+        let body_clone = body_bytes.clone();
+
+        retry_executor
+            .execute_with_predicate(
+                || {
+                    let client = client.clone();
+                    let backend_url = backend_url_clone.clone();
+                    let method = method_clone.clone();
+                    let headers = headers_clone.clone();
+                    let body = body_clone.clone();
+                    async move {
+                        send_request(client, method, headers, body, &backend_url).await
+                    }
+                },
+                |e| {
+                    // Only retry on timeout or connection errors
+                    matches!(e, GatewayError::Timeout(_) | GatewayError::Backend(_))
+                },
+            )
+            .await
+    } else {
+        send_request(state.client.clone(), method_for_request, headers_for_request, body_bytes, &backend_url).await
+    };
+
+    // Record result in circuit breaker
+    if let Some(circuit_breaker) = &state.circuit_breaker {
+        match &response {
+            Ok(resp) => {
+                // Consider 5xx status codes as failures
+                if resp.status().is_server_error() {
+                    circuit_breaker.record_failure(backend).await;
+                } else {
+                    circuit_breaker.record_success(backend).await;
+                }
+            }
+            Err(e) => {
+                match e {
+                    GatewayError::Timeout(_) => {
+                        circuit_breaker.record_timeout(backend).await;
+                    }
+                    _ => {
+                        circuit_breaker.record_failure(backend).await;
+                    }
+                }
+            }
+        }
+    }
+
+    // Log result
+    match &response {
+        Ok(resp) => {
+            info!(
+                status = %resp.status(),
+                backend = %backend,
+                "Request completed"
+            );
+        }
+        Err(e) => {
+            warn!(
+                error = %e,
+                backend = %backend,
+                "Request failed"
+            );
+        }
+    }
+
+    response
+}
+
+/// Send request to the backend service
+async fn send_request(
+    client: reqwest::Client,
+    method: Method,
+    headers: HeaderMap,
+    body_bytes: Bytes,
+    backend_url: &str,
+) -> Result<Response<Body>> {
     // Build the backend request
     let mut backend_req = client
         .request(method.clone(), backend_url)
@@ -234,7 +324,7 @@ mod tests {
         }];
 
         let _router = Router::new(routes).unwrap();
-        let _state = ProxyState::new(_router, Duration::from_secs(30), None);
+        let _state = ProxyState::new(_router, Duration::from_secs(30), None, None, None);
 
         // State created successfully - just testing that creation doesn't panic
     }

@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod circuit_breaker;
 pub mod config;
 pub mod error;
 pub mod proxy;
@@ -41,6 +42,33 @@ pub async fn init_gateway(config: GatewayConfig) -> Result<()> {
         None
     };
 
+    // Create circuit breaker service if configured
+    let circuit_breaker = if let Some(cb_config) = config.circuit_breaker {
+        info!(
+            failure_threshold = cb_config.failure_threshold,
+            success_threshold = cb_config.success_threshold,
+            timeout_secs = cb_config.timeout_secs,
+            "Initializing circuit breaker service"
+        );
+        Some(circuit_breaker::CircuitBreakerService::new(cb_config))
+    } else {
+        info!("Circuit breaker not configured");
+        None
+    };
+
+    // Create retry executor if configured
+    let retry_executor = if let Some(retry_config) = config.retry {
+        info!(
+            max_retries = retry_config.max_retries,
+            initial_backoff_ms = retry_config.initial_backoff_ms,
+            "Initializing retry executor"
+        );
+        Some(circuit_breaker::RetryExecutor::new(retry_config))
+    } else {
+        info!("Retry logic not configured");
+        None
+    };
+
     // Create router
     let router = Router::new(config.routes)?;
     info!("Loaded {} routes", router.routes().len());
@@ -50,6 +78,8 @@ pub async fn init_gateway(config: GatewayConfig) -> Result<()> {
         router,
         Duration::from_secs(config.server.timeout_secs),
         auth_service,
+        circuit_breaker,
+        retry_executor,
     );
 
     // Create Axum app
