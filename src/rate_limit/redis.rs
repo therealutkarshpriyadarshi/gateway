@@ -1,6 +1,6 @@
 use super::lua_scripts::{FIXED_WINDOW_SCRIPT, SLIDING_WINDOW_SCRIPT, TOKEN_BUCKET_SCRIPT};
 use super::types::{RateLimitConfig, RateLimitKey, RateLimitResult};
-use redis::{aio::ConnectionManager, AsyncCommands, Script};
+use redis::{aio::ConnectionManager, Script};
 use std::time::SystemTime;
 use tracing::{debug, error, warn};
 

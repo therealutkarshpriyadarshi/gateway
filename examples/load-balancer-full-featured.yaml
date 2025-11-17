@@ -1,0 +1,129 @@
+# Full-Featured Load Balancer Example
+#
+# This configuration demonstrates load balancing combined with:
+# - Authentication (JWT)
+# - Rate limiting
+# - Circuit breaker
+# - Retry logic
+# - Health checks
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  timeout_secs: 30
+
+# Global authentication configuration
+auth:
+  jwt:
+    secret: "your-256-bit-secret-key-here-change-in-production"
+    algorithm: "HS256"
+    issuer: "https://auth.example.com"
+    audience: "https://api.example.com"
+
+# Global rate limiting
+rate_limiting:
+  enabled: true
+  global:
+    - dimension: ip
+      requests: 1000
+      window_secs: 3600  # 1000 requests per hour per IP
+
+# Circuit breaker configuration
+circuit_breaker:
+  failure_threshold: 5      # Open after 5 failures
+  success_threshold: 2      # Close after 2 successes
+  timeout_secs: 60          # Try again after 60 seconds
+  half_open_max_requests: 3 # Allow 3 requests in half-open state
+
+# Retry configuration
+retry:
+  max_retries: 3
+  initial_backoff_ms: 100
+  max_backoff_ms: 5000
+  backoff_multiplier: 2
+
+routes:
+  # Public endpoints (no auth, single backend)
+  - path: "/public/*path"
+    backend: "http://public-service:3000"
+    description: "Public API endpoints"
+
+  # Protected API with load balancing
+  - path: "/api/*path"
+    backends:
+      - url: "http://api-1:4000"
+        weight: 3
+      - url: "http://api-2:4001"
+        weight: 2
+      - url: "http://api-3:4002"
+        weight: 1
+    load_balancer:
+      strategy: "weighted"
+    health_check:
+      enabled: true
+      interval_secs: 10
+      timeout_secs: 3
+      unhealthy_threshold: 3
+      healthy_threshold: 2
+      path: "/health"
+      expected_status: 200
+      passive_enabled: true
+    auth:
+      required: true
+      methods: ["jwt"]
+    rate_limit:
+      - dimension: user
+        requests: 100
+        window_secs: 60  # 100 requests per minute per user
+    description: "Protected API with weighted load balancing"
+
+  # User service with session affinity
+  - path: "/users/*path"
+    backends:
+      - url: "http://user-1:5000"
+        weight: 1
+      - url: "http://user-2:5001"
+        weight: 1
+    load_balancer:
+      strategy: "ip_hash"  # Session affinity
+    health_check:
+      enabled: true
+      interval_secs: 15
+      timeout_secs: 5
+      unhealthy_threshold: 3
+      healthy_threshold: 2
+      path: "/health"
+      expected_status: 200
+      passive_enabled: true
+    auth:
+      required: true
+      methods: ["jwt"]
+    description: "User service with IP hash for session affinity"
+
+  # Admin endpoints (strict rate limiting)
+  - path: "/admin/*path"
+    backends:
+      - url: "http://admin-1:6000"
+        weight: 1
+      - url: "http://admin-2:6001"
+        weight: 1
+    load_balancer:
+      strategy: "least_connections"
+    health_check:
+      enabled: true
+      interval_secs: 10
+      timeout_secs: 3
+      unhealthy_threshold: 2
+      healthy_threshold: 2
+      path: "/health"
+      expected_status: 200
+      passive_enabled: true
+    auth:
+      required: true
+      methods: ["jwt"]
+    rate_limit:
+      - dimension: user
+        requests: 10
+        window_secs: 60  # 10 requests per minute for admin
+    methods: ["GET", "POST", "PUT", "DELETE"]
+    description: "Admin endpoints with strict rate limiting"

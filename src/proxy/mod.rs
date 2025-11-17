@@ -4,12 +4,13 @@ use crate::error::{GatewayError, Result};
 use crate::router::Router;
 use axum::{
     body::Body,
-    extract::State,
+    extract::{ConnectInfo, State},
     http::{HeaderMap, Method, Request, Response},
     response::IntoResponse,
 };
 use bytes::Bytes;
 use http_body_util::BodyExt;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, info, warn};
@@ -52,16 +53,21 @@ impl ProxyState {
 #[axum::debug_handler]
 pub async fn proxy_handler(
     State(state): State<ProxyState>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
     req: Request<Body>,
 ) -> Result<impl IntoResponse> {
     let method = req.method().clone();
     let uri = req.uri().clone();
     let path = uri.path();
     let query = uri.query();
+    let client_ip = connect_info
+        .map(|ConnectInfo(addr)| addr.ip())
+        .unwrap_or_else(|| "127.0.0.1".parse().unwrap());
 
     info!(
         method = %method,
         path = %path,
+        client_ip = %client_ip,
         "Incoming request"
     );
 
@@ -74,7 +80,6 @@ pub async fn proxy_handler(
     let route_match = state.router.match_route(path, &method)?;
 
     debug!(
-        backend = %route_match.route.backend,
         params = ?route_match.params,
         "Route matched"
     );
@@ -107,8 +112,22 @@ pub async fn proxy_handler(
         }
     }
 
+    // Select backend using load balancer
+    let backend = route_match
+        .route
+        .load_balancer
+        .select_backend(Some(client_ip))
+        .ok_or_else(|| GatewayError::Backend("No healthy backend available".to_string()))?;
+
+    debug!(
+        backend = %backend.url(),
+        healthy_count = route_match.route.load_balancer.healthy_count(),
+        total_count = route_match.route.load_balancer.total_count(),
+        "Selected backend"
+    );
+
     // Build backend URL
-    let mut backend_url = route_match.build_backend_url(path);
+    let mut backend_url = route_match.build_backend_url(backend.url(), path);
     if let Some(q) = query {
         backend_url.push('?');
         backend_url.push_str(q);
@@ -116,18 +135,21 @@ pub async fn proxy_handler(
 
     debug!(backend_url = %backend_url, "Forwarding to backend");
 
-    let backend = &route_match.route.backend;
+    let backend_url_for_cb = backend.url().to_string();
 
     // Check circuit breaker
     if let Some(circuit_breaker) = &state.circuit_breaker {
-        if !circuit_breaker.can_proceed(backend).await {
-            warn!(backend = %backend, "Circuit breaker open, rejecting request");
+        if !circuit_breaker.can_proceed(&backend_url_for_cb).await {
+            warn!(backend = %backend_url_for_cb, "Circuit breaker open, rejecting request");
             return Err(GatewayError::CircuitBreakerOpen(format!(
                 "Circuit breaker is open for backend: {}",
-                backend
+                backend_url_for_cb
             )));
         }
     }
+
+    // Track connection for least connections strategy
+    backend.increment_connections();
 
     // Collect request body and headers for potential retries
     let method_for_request = req.method().clone();
@@ -155,9 +177,7 @@ pub async fn proxy_handler(
                     let method = method_clone.clone();
                     let headers = headers_clone.clone();
                     let body = body_clone.clone();
-                    async move {
-                        send_request(client, method, headers, body, &backend_url).await
-                    }
+                    async move { send_request(client, method, headers, body, &backend_url).await }
                 },
                 |e| {
                     // Only retry on timeout or connection errors
@@ -166,8 +186,18 @@ pub async fn proxy_handler(
             )
             .await
     } else {
-        send_request(state.client.clone(), method_for_request, headers_for_request, body_bytes, &backend_url).await
+        send_request(
+            state.client.clone(),
+            method_for_request,
+            headers_for_request,
+            body_bytes,
+            &backend_url,
+        )
+        .await
     };
+
+    // Decrement connection counter
+    backend.decrement_connections();
 
     // Record result in circuit breaker
     if let Some(circuit_breaker) = &state.circuit_breaker {
@@ -175,22 +205,26 @@ pub async fn proxy_handler(
             Ok(resp) => {
                 // Consider 5xx status codes as failures
                 if resp.status().is_server_error() {
-                    circuit_breaker.record_failure(backend).await;
+                    circuit_breaker.record_failure(&backend_url_for_cb).await;
                 } else {
-                    circuit_breaker.record_success(backend).await;
+                    circuit_breaker.record_success(&backend_url_for_cb).await;
                 }
             }
-            Err(e) => {
-                match e {
-                    GatewayError::Timeout(_) => {
-                        circuit_breaker.record_timeout(backend).await;
-                    }
-                    _ => {
-                        circuit_breaker.record_failure(backend).await;
-                    }
+            Err(e) => match e {
+                GatewayError::Timeout(_) => {
+                    circuit_breaker.record_timeout(&backend_url_for_cb).await;
                 }
-            }
+                _ => {
+                    circuit_breaker.record_failure(&backend_url_for_cb).await;
+                }
+            },
         }
+    }
+
+    // Passive health check
+    if let Some(health_checker) = &route_match.route.health_checker {
+        let success = response.is_ok() && !response.as_ref().unwrap().status().is_server_error();
+        health_checker.passive_check(&backend, success);
     }
 
     // Log result
@@ -198,14 +232,14 @@ pub async fn proxy_handler(
         Ok(resp) => {
             info!(
                 status = %resp.status(),
-                backend = %backend,
+                backend = %backend.url(),
                 "Request completed"
             );
         }
         Err(e) => {
             warn!(
                 error = %e,
-                backend = %backend,
+                backend = %backend.url(),
                 "Request failed"
             );
         }
@@ -237,18 +271,15 @@ async fn send_request(
     }
 
     // Send the request
-    let backend_response = backend_req
-        .send()
-        .await
-        .map_err(|e| {
-            if e.is_timeout() {
-                GatewayError::Timeout(format!("Backend request timed out: {}", e))
-            } else if e.is_connect() {
-                GatewayError::Backend(format!("Failed to connect to backend: {}", e))
-            } else {
-                GatewayError::Proxy(format!("Backend request failed: {}", e))
-            }
-        })?;
+    let backend_response = backend_req.send().await.map_err(|e| {
+        if e.is_timeout() {
+            GatewayError::Timeout(format!("Backend request timed out: {}", e))
+        } else if e.is_connect() {
+            GatewayError::Backend(format!("Failed to connect to backend: {}", e))
+        } else {
+            GatewayError::Proxy(format!("Backend request failed: {}", e))
+        }
+    })?;
 
     // Build response
     let status = backend_response.status();
@@ -292,7 +323,10 @@ fn is_hop_by_hop_header(name: &str) -> bool {
 
 /// Check if a path is a health check endpoint that should bypass authentication
 fn is_health_check_path(path: &str) -> bool {
-    matches!(path, "/health" | "/healthz" | "/ready" | "/readiness" | "/ping")
+    matches!(
+        path,
+        "/health" | "/healthz" | "/ready" | "/readiness" | "/ping"
+    )
 }
 
 #[cfg(test)]
@@ -315,7 +349,10 @@ mod tests {
 
         let routes = vec![RouteConfig {
             path: "/test".to_string(),
-            backend: "http://localhost:3000".to_string(),
+            backend: Some("http://localhost:3000".to_string()),
+            backends: vec![],
+            load_balancer: None,
+            health_check: None,
             methods: vec![],
             strip_prefix: false,
             description: "".to_string(),

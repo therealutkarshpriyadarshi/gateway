@@ -80,11 +80,7 @@ impl AuthService {
         let mut errors = Vec::new();
 
         // Try JWT authentication
-        if methods.is_empty()
-            || methods
-                .iter()
-                .any(|m| *m == crate::config::AuthMethod::Jwt)
-        {
+        if methods.is_empty() || methods.contains(&crate::config::AuthMethod::Jwt) {
             if let Some(validator) = &self.jwt_validator {
                 match validator.validate(headers).await {
                     Ok(result) => return Ok(result),
@@ -95,9 +91,7 @@ impl AuthService {
 
         // Try API key authentication
         if methods.is_empty()
-            || methods
-                .iter()
-                .any(|m| *m == crate::config::AuthMethod::ApiKey)
+            || methods.contains(&crate::config::AuthMethod::ApiKey)
         {
             if let Some(validator) = &self.api_key_validator {
                 match validator.validate(headers).await {

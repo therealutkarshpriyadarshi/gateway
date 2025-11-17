@@ -1,0 +1,32 @@
+# Load Balancer Example: IP Hash Strategy
+#
+# This configuration demonstrates IP hash load balancing where requests
+# from the same client IP are always sent to the same backend server.
+# This is useful for session affinity and caching.
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  timeout_secs: 30
+
+routes:
+  - path: "/api/*path"
+    backends:
+      - url: "http://backend-1:3000"
+        weight: 1
+      - url: "http://backend-2:3001"
+        weight: 1
+      - url: "http://backend-3:3002"
+        weight: 1
+    load_balancer:
+      strategy: "ip_hash"
+    health_check:
+      enabled: true
+      interval_secs: 10
+      timeout_secs: 3
+      unhealthy_threshold: 3
+      healthy_threshold: 2
+      path: "/health"
+      expected_status: 200
+      passive_enabled: true
+    description: "API service with IP hash for session affinity"

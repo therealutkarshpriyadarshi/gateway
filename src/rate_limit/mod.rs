@@ -51,6 +51,4 @@ pub mod types;
 pub use middleware::{add_rate_limit_headers, rate_limit_middleware, RateLimitMiddleware};
 pub use redis::RateLimitAlgorithm;
 pub use service::RateLimiterService;
-pub use types::{
-    RateLimitConfig, RateLimitDimension, RateLimitKey, RateLimitResult,
-};
+pub use types::{RateLimitConfig, RateLimitDimension, RateLimitKey, RateLimitResult};
