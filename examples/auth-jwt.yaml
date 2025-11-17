@@ -1,0 +1,47 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+  timeout_secs: 30
+
+# Global authentication configuration
+auth:
+  # JWT configuration
+  jwt:
+    # Use secret for HS256 (symmetric)
+    secret: "your-256-bit-secret-key-change-this-in-production"
+    algorithm: "HS256"
+    # Optional: validate issuer
+    issuer: "https://your-auth-server.com"
+    # Optional: validate audience
+    audience: "https://your-api.com"
+
+routes:
+  # Public endpoint - no authentication required
+  - path: "/api/public"
+    backend: "http://localhost:3000"
+    methods: ["GET"]
+    description: "Public API endpoint"
+
+  # Protected endpoint - JWT authentication required
+  - path: "/api/users"
+    backend: "http://localhost:3000"
+    methods: ["GET", "POST"]
+    description: "User management API"
+    auth:
+      required: true
+      methods: ["jwt"]
+
+  # Protected endpoint with wildcard
+  - path: "/api/users/:id"
+    backend: "http://localhost:3000"
+    methods: ["GET", "PUT", "DELETE"]
+    description: "User operations by ID"
+    auth:
+      required: true
+      methods: ["jwt"]
+
+  # Health check - automatically bypasses authentication
+  - path: "/health"
+    backend: "http://localhost:3000"
+    methods: ["GET"]
+    description: "Health check endpoint"

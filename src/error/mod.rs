@@ -44,6 +44,18 @@ pub enum GatewayError {
 
     #[error("Serialization error: {0}")]
     Serialization(String),
+
+    #[error("Authentication failed: {0}")]
+    Unauthorized(String),
+
+    #[error("Invalid JWT token: {0}")]
+    InvalidToken(String),
+
+    #[error("Missing authentication credentials")]
+    MissingCredentials,
+
+    #[error("Invalid API key")]
+    InvalidApiKey,
 }
 
 impl GatewayError {
@@ -61,6 +73,10 @@ impl GatewayError {
             GatewayError::Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayError::Http(_) => StatusCode::BAD_REQUEST,
             GatewayError::Serialization(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            GatewayError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
+            GatewayError::InvalidToken(_) => StatusCode::UNAUTHORIZED,
+            GatewayError::MissingCredentials => StatusCode::UNAUTHORIZED,
+            GatewayError::InvalidApiKey => StatusCode::UNAUTHORIZED,
         }
     }
 }

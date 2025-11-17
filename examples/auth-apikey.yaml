@@ -1,0 +1,41 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+  timeout_secs: 30
+
+# Global authentication configuration
+auth:
+  # API Key configuration
+  api_key:
+    # Header name to look for API key
+    header: "X-API-Key"
+    # In-memory API keys (key -> description)
+    keys:
+      "sk_test_123456789": "Development API key"
+      "sk_prod_abcdefghi": "Production API key"
+      "partner_xyz_key": "Partner XYZ API key"
+
+routes:
+  # Protected with API key
+  - path: "/api/data"
+    backend: "http://localhost:3000"
+    methods: ["GET", "POST"]
+    description: "Data API"
+    auth:
+      required: true
+      methods: ["apikey"]
+
+  # Protected endpoint
+  - path: "/api/analytics"
+    backend: "http://localhost:3001"
+    methods: ["GET"]
+    description: "Analytics API"
+    auth:
+      required: true
+      methods: ["apikey"]
+
+  # Public endpoint
+  - path: "/api/public"
+    backend: "http://localhost:3000"
+    methods: ["GET"]
+    description: "Public API"

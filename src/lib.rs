@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod config;
 pub mod error;
 pub mod proxy;
@@ -23,12 +24,32 @@ pub async fn init_gateway(config: GatewayConfig) -> Result<()> {
         config.server.host, config.server.port
     );
 
+    // Create authentication service if configured
+    let auth_service = if config.auth.is_some() {
+        info!("Initializing authentication service");
+        let service = auth::AuthService::new(config.auth.as_ref()).await?;
+        if service.is_available() {
+            info!("Authentication service initialized successfully");
+            Some(service)
+        } else {
+            info!("No authentication methods configured");
+            None
+        }
+    } else {
+        info!("Authentication not configured");
+        None
+    };
+
     // Create router
     let router = Router::new(config.routes)?;
     info!("Loaded {} routes", router.routes().len());
 
     // Create proxy state
-    let proxy_state = ProxyState::new(router, Duration::from_secs(config.server.timeout_secs));
+    let proxy_state = ProxyState::new(
+        router,
+        Duration::from_secs(config.server.timeout_secs),
+        auth_service,
+    );
 
     // Create Axum app
     let app = AxumRouter::new()

@@ -4,7 +4,7 @@ A production-grade API Gateway built in Rust, providing high-performance request
 
 ## Features
 
-### Phase 1 (Current Implementation)
+### Phase 1: Foundation & Core Routing ✅
 
 - **Path-Based Routing**: Route requests based on URL paths with support for parameters and wildcards
 - **Method-Based Routing**: Filter routes by HTTP methods (GET, POST, PUT, DELETE, etc.)
@@ -14,9 +14,20 @@ A production-grade API Gateway built in Rust, providing high-performance request
 - **Error Handling**: Comprehensive error handling with meaningful error messages
 - **High Performance**: Built on Axum and Tokio for async, non-blocking operations
 
+### Phase 2: Authentication & Authorization ✅
+
+- **JWT Validation**: Full JWT support with HS256 and RS256 algorithms
+- **API Key Authentication**: Header-based API keys with in-memory or Redis-backed storage
+- **Per-Route Authentication**: Configure authentication requirements per route
+- **Multiple Auth Methods**: Support JWT and API keys simultaneously
+- **Health Check Bypass**: Automatic authentication bypass for health check endpoints
+- **Flexible Configuration**: Allow specific auth methods or accept any configured method
+- **Comprehensive Error Responses**: Clear 401 Unauthorized responses with detailed error messages
+
+📖 **See [AUTH.md](AUTH.md) for detailed authentication documentation and examples.**
+
 ### Coming Soon
 
-- Authentication & Authorization (JWT, API keys)
 - Rate Limiting (token bucket, Redis-backed)
 - Circuit Breaking & Resilience
 - Load Balancing & Health Checks
@@ -350,7 +361,7 @@ Error types:
 See [ROADMAP.md](ROADMAP.md) for the complete development plan.
 
 - [x] Phase 1: Foundation & Core Routing (Weeks 1-2)
-- [ ] Phase 2: Authentication & Authorization (Week 3)
+- [x] Phase 2: Authentication & Authorization (Week 3)
 - [ ] Phase 3: Rate Limiting (Week 4)
 - [ ] Phase 4: Circuit Breaking & Resilience (Week 5)
 - [ ] Phase 5: Load Balancing & Health Checks (Week 6)
