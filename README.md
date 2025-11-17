@@ -38,9 +38,23 @@ A production-grade API Gateway built in Rust, providing high-performance request
 
 📖 **See [RATE_LIMITING.md](RATE_LIMITING.md) for detailed rate limiting documentation and examples.**
 
+### Phase 4: Circuit Breaking & Resilience ✅
+
+- **Circuit Breaker Pattern**: Automatic failure detection and recovery for backend services
+- **Three States**: Closed (normal), Open (failing), Half-Open (testing recovery)
+- **Per-Backend Breakers**: Independent circuit breakers for each backend service
+- **Configurable Thresholds**: Customize failure/success thresholds and timeouts
+- **Retry Logic**: Exponential backoff with configurable max retries
+- **Smart Retry**: Only retries transient failures (timeouts, connection errors)
+- **Failure Detection**: Tracks timeouts, connection errors, and 5xx responses
+- **Metrics Tracking**: Comprehensive metrics per backend (successes, failures, rejections)
+- **Fast-Fail**: Immediate rejection when circuit is open (no wasted resources)
+- **Automatic Recovery**: Gradual recovery testing with probe requests
+
+📖 **See [CIRCUIT_BREAKER.md](CIRCUIT_BREAKER.md) for detailed circuit breaker documentation and examples.**
+
 ### Coming Soon
 
-- Circuit Breaking & Resilience
 - Load Balancing & Health Checks
 - Observability & Monitoring (Prometheus, OpenTelemetry)
 - Request/Response Transformation
@@ -374,7 +388,7 @@ See [ROADMAP.md](ROADMAP.md) for the complete development plan.
 - [x] Phase 1: Foundation & Core Routing (Weeks 1-2)
 - [x] Phase 2: Authentication & Authorization (Week 3)
 - [x] Phase 3: Rate Limiting (Week 4)
-- [ ] Phase 4: Circuit Breaking & Resilience (Week 5)
+- [x] Phase 4: Circuit Breaking & Resilience (Week 5)
 - [ ] Phase 5: Load Balancing & Health Checks (Week 6)
 - [ ] Phase 6: Observability & Monitoring (Week 7)
 - [ ] Phase 7: Advanced Features (Week 8)

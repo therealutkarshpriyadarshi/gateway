@@ -56,6 +56,12 @@ pub enum GatewayError {
 
     #[error("Invalid API key")]
     InvalidApiKey,
+
+    #[error("Circuit breaker open: {0}")]
+    CircuitBreakerOpen(String),
+
+    #[error("Rate limit exceeded: {0}")]
+    RateLimitExceeded(String),
 }
 
 impl GatewayError {
@@ -77,6 +83,8 @@ impl GatewayError {
             GatewayError::InvalidToken(_) => StatusCode::UNAUTHORIZED,
             GatewayError::MissingCredentials => StatusCode::UNAUTHORIZED,
             GatewayError::InvalidApiKey => StatusCode::UNAUTHORIZED,
+            GatewayError::CircuitBreakerOpen(_) => StatusCode::SERVICE_UNAVAILABLE,
+            GatewayError::RateLimitExceeded(_) => StatusCode::TOO_MANY_REQUESTS,
         }
     }
 }

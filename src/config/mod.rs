@@ -1,3 +1,4 @@
+use crate::circuit_breaker::types::{CircuitBreakerConfig, RetryConfig};
 use crate::error::{GatewayError, Result};
 use crate::rate_limit::types::{RateLimitConfig, RateLimitDimension};
 use serde::{Deserialize, Serialize};
@@ -16,6 +17,12 @@ pub struct GatewayConfig {
     /// Rate limiting configuration
     #[serde(default)]
     pub rate_limiting: Option<GlobalRateLimitConfig>,
+    /// Circuit breaker configuration
+    #[serde(default)]
+    pub circuit_breaker: Option<CircuitBreakerConfig>,
+    /// Retry configuration
+    #[serde(default)]
+    pub retry: Option<RetryConfig>,
 }
 
 /// Server configuration
@@ -286,6 +293,8 @@ impl GatewayConfig {
             routes: vec![],
             auth: None,
             rate_limiting: None,
+            circuit_breaker: None,
+            retry: None,
         }
     }
 }
@@ -350,6 +359,8 @@ routes: []
             }],
             auth: None,
             rate_limiting: None,
+            circuit_breaker: None,
+            retry: None,
         };
 
         assert!(config.validate().is_err());
@@ -370,6 +381,8 @@ routes: []
             }],
             auth: None,
             rate_limiting: None,
+            circuit_breaker: None,
+            retry: None,
         };
 
         assert!(config.validate().is_err());
@@ -390,6 +403,8 @@ routes: []
             }],
             auth: None,
             rate_limiting: None,
+            circuit_breaker: None,
+            retry: None,
         };
 
         assert!(config.validate().is_err());
@@ -410,6 +425,8 @@ routes: []
             }],
             auth: None,
             rate_limiting: None,
+            circuit_breaker: None,
+            retry: None,
         };
 
         assert!(config.validate().is_ok());
