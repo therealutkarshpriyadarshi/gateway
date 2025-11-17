@@ -90,9 +90,7 @@ impl AuthService {
         }
 
         // Try API key authentication
-        if methods.is_empty()
-            || methods.contains(&crate::config::AuthMethod::ApiKey)
-        {
+        if methods.is_empty() || methods.contains(&crate::config::AuthMethod::ApiKey) {
             if let Some(validator) = &self.api_key_validator {
                 match validator.validate(headers).await {
                     Ok(result) => return Ok(result),

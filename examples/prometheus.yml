@@ -1,0 +1,58 @@
+# Prometheus Configuration for API Gateway
+# Save this file and mount it when running Prometheus
+
+global:
+  scrape_interval: 15s      # Scrape metrics every 15 seconds
+  evaluation_interval: 15s  # Evaluate rules every 15 seconds
+  external_labels:
+    cluster: 'api-gateway-cluster'
+    environment: 'production'
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['localhost:9093']
+
+# Load rules once and periodically evaluate them
+# rule_files:
+#   - "alerts.yml"
+
+# Scrape configurations
+scrape_configs:
+  # API Gateway metrics
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['localhost:8080']  # Gateway address
+        labels:
+          service: 'api-gateway'
+          team: 'platform'
+
+    metrics_path: /metrics  # Metrics endpoint path
+    scrape_interval: 10s    # Override global interval for this job
+    scrape_timeout: 5s
+
+  # Optional: Scrape Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+# Example Usage:
+# 1. Save this file as prometheus.yml
+#
+# 2. Run Prometheus with Docker:
+#    docker run -d --name prometheus \
+#      -p 9090:9090 \
+#      -v $(pwd)/prometheus.yml:/etc/prometheus/prometheus.yml \
+#      prom/prometheus
+#
+# 3. Access Prometheus UI:
+#    http://localhost:9090
+#
+# 4. Example queries:
+#    - Total requests: sum(gateway_requests_total)
+#    - Request rate: rate(gateway_requests_total[1m])
+#    - P95 latency: histogram_quantile(0.95, rate(gateway_request_duration_seconds_bucket[1m]))
+#    - Error rate: rate(gateway_requests_errors_total[1m])
+#    - Backend health: gateway_backend_healthy
+#    - Circuit breaker state: gateway_circuit_breaker_state

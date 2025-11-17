@@ -1,0 +1,95 @@
+# Docker Compose for Complete Observability Stack
+# This sets up Prometheus, Grafana, and Jaeger for the API Gateway
+
+version: '3.8'
+
+services:
+  # Jaeger - Distributed Tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: gateway-jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+      - "14268:14268"  # Jaeger collector
+      - "9411:9411"    # Zipkin compatible endpoint
+    networks:
+      - gateway-network
+
+  # Prometheus - Metrics Collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: gateway-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - gateway-network
+    restart: unless-stopped
+
+  # Grafana - Visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: gateway-grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./grafana-dashboard.json:/var/lib/grafana/dashboards/gateway.json:ro
+    networks:
+      - gateway-network
+    depends_on:
+      - prometheus
+      - jaeger
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  gateway-network:
+    driver: bridge
+
+# Usage Instructions:
+# 1. Start the observability stack:
+#    docker-compose -f docker-compose-observability.yml up -d
+#
+# 2. Access the services:
+#    - Grafana: http://localhost:3000 (admin/admin)
+#    - Prometheus: http://localhost:9090
+#    - Jaeger: http://localhost:16686
+#
+# 3. Configure your API Gateway:
+#    Update observability-full.yaml with:
+#    - otlp_endpoint: "http://localhost:4317"
+#
+# 4. Start the gateway:
+#    cargo run -- examples/observability-full.yaml
+#
+# 5. In Grafana:
+#    - Add Prometheus datasource (http://prometheus:9090)
+#    - Add Jaeger datasource (http://jaeger:16686)
+#    - Import the dashboard from grafana-dashboard.json
+#
+# 6. Stop the stack:
+#    docker-compose -f docker-compose-observability.yml down
+#
+# 7. Remove volumes (caution - deletes all data):
+#    docker-compose -f docker-compose-observability.yml down -v

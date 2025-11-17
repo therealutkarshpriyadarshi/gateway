@@ -275,6 +275,7 @@ fn test_config_validation() {
         rate_limiting: None,
         circuit_breaker: None,
         retry: None,
+        observability: None,
     };
 
     assert!(config.validate().is_ok());
@@ -300,6 +301,7 @@ fn test_config_invalid_backend() {
         rate_limiting: None,
         circuit_breaker: None,
         retry: None,
+        observability: None,
     };
 
     assert!(config.validate().is_err());
