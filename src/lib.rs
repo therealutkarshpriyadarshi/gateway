@@ -4,15 +4,19 @@ pub mod config;
 pub mod error;
 pub mod healthcheck;
 pub mod loadbalancer;
+pub mod metrics;
+pub mod observability;
 pub mod proxy;
 pub mod rate_limit;
 pub mod router;
 
 use crate::config::GatewayConfig;
 use crate::error::Result;
+use crate::metrics::{metrics_handler, MetricsService};
+use crate::observability::{request_id_middleware, TracingConfig};
 use crate::proxy::{proxy_handler, ProxyState};
 use crate::router::Router;
-use axum::{routing::any, Router as AxumRouter};
+use axum::{middleware, routing::any, routing::get, Router as AxumRouter};
 use std::time::Duration;
 use tower_http::trace::TraceLayer;
 use tracing::info;
@@ -84,10 +88,41 @@ pub async fn init_gateway(config: GatewayConfig) -> Result<()> {
         retry_executor,
     );
 
+    // Initialize metrics service if configured
+    let metrics_service = if let Some(obs_config) = &config.observability {
+        if let Some(metrics_config) = &obs_config.metrics {
+            if metrics_config.enabled {
+                info!("Initializing Prometheus metrics service");
+                let service = MetricsService::new()?;
+                info!("Metrics endpoint enabled at {}", metrics_config.path);
+                Some((service, metrics_config.path.clone()))
+            } else {
+                info!("Metrics disabled in configuration");
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     // Create Axum app
-    let app = AxumRouter::new()
+    let mut app = AxumRouter::new()
         .route("/*path", any(proxy_handler))
-        .with_state(proxy_state)
+        .with_state(proxy_state);
+
+    // Add metrics endpoint if configured
+    if let Some((metrics_service, metrics_path)) = metrics_service {
+        app = app.route(
+            &metrics_path,
+            get(metrics_handler).with_state(metrics_service),
+        );
+    }
+
+    // Add middleware layers
+    app = app
+        .layer(middleware::from_fn(request_id_middleware))
         .layer(TraceLayer::new_for_http());
 
     // Bind and serve
@@ -109,14 +144,19 @@ pub async fn init_gateway(config: GatewayConfig) -> Result<()> {
     Ok(())
 }
 
-/// Initialize tracing/logging
-pub fn init_tracing() {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "gateway=debug,tower_http=debug".into()),
-        )
-        .with_target(false)
-        .compact()
-        .init();
+/// Initialize tracing/logging with optional OpenTelemetry support
+pub fn init_tracing(config: Option<&GatewayConfig>) -> Result<()> {
+    // Check if OpenTelemetry is configured
+    let otel_config = config
+        .and_then(|c| c.observability.as_ref())
+        .and_then(|o| o.tracing.as_ref())
+        .filter(|t| t.enabled)
+        .map(|t| TracingConfig {
+            otlp_endpoint: t.otlp_endpoint.clone(),
+            service_name: t.service_name.clone(),
+            service_version: t.service_version.clone(),
+            sample_rate: t.sample_rate,
+        });
+
+    observability::init_tracing(otel_config)
 }

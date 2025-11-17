@@ -1,0 +1,65 @@
+# Gateway Configuration with Prometheus Metrics
+# This configuration demonstrates enabling Prometheus metrics endpoint
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  timeout_secs: 30
+
+# Observability Configuration
+observability:
+  # Metrics configuration
+  metrics:
+    enabled: true
+    path: "/metrics"  # Prometheus metrics endpoint
+
+routes:
+  # Simple proxy route
+  - path: "/api/users"
+    backend: "http://localhost:3000"
+    methods: ["GET", "POST", "PUT", "DELETE"]
+    description: "User service"
+
+  # Route with multiple backends and load balancing
+  - path: "/api/products/*path"
+    backends:
+      - url: "http://localhost:3001"
+        weight: 2
+      - url: "http://localhost:3002"
+        weight: 1
+    load_balancer:
+      strategy: "weighted"
+    health_check:
+      enabled: true
+      interval_secs: 10
+      timeout_secs: 5
+      path: "/health"
+    description: "Product service with load balancing"
+
+# Example Usage:
+# 1. Start the gateway:
+#    cargo run -- examples/observability-metrics.yaml
+#
+# 2. View metrics:
+#    curl http://localhost:8080/metrics
+#
+# 3. Scrape with Prometheus:
+#    Add to prometheus.yml:
+#    scrape_configs:
+#      - job_name: 'api-gateway'
+#        static_configs:
+#          - targets: ['localhost:8080']
+#        metrics_path: /metrics
+#        scrape_interval: 15s
+#
+# Available Metrics:
+# - gateway_requests_total - Total HTTP requests
+# - gateway_request_duration_seconds - Request latency histogram
+# - gateway_requests_errors_total - Error count
+# - gateway_backend_requests_total - Backend requests
+# - gateway_backend_duration_seconds - Backend latency
+# - gateway_backend_healthy - Backend health status
+# - gateway_circuit_breaker_state - Circuit breaker state
+# - gateway_active_connections - Active backend connections
+# - gateway_auth_attempts_total - Authentication attempts
+# - gateway_auth_failures_total - Authentication failures

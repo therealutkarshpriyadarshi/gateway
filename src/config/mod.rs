@@ -25,6 +25,9 @@ pub struct GatewayConfig {
     /// Retry configuration
     #[serde(default)]
     pub retry: Option<RetryConfig>,
+    /// Observability configuration
+    #[serde(default)]
+    pub observability: Option<ObservabilityConfig>,
 }
 
 /// Server configuration
@@ -209,6 +212,68 @@ fn default_rate_limit_algorithm() -> String {
     "sliding_window".to_string()
 }
 
+/// Observability configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ObservabilityConfig {
+    /// Metrics configuration
+    #[serde(default)]
+    pub metrics: Option<MetricsConfig>,
+    /// Tracing configuration
+    #[serde(default)]
+    pub tracing: Option<TracingConfigOptions>,
+}
+
+/// Metrics configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetricsConfig {
+    /// Enable Prometheus metrics endpoint
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Metrics endpoint path
+    #[serde(default = "default_metrics_path")]
+    pub path: String,
+}
+
+/// Tracing configuration options
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TracingConfigOptions {
+    /// Enable OpenTelemetry tracing
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// OTLP endpoint URL
+    #[serde(default = "default_otlp_endpoint")]
+    pub otlp_endpoint: String,
+    /// Service name
+    #[serde(default = "default_service_name")]
+    pub service_name: String,
+    /// Service version
+    #[serde(default = "default_service_version")]
+    pub service_version: String,
+    /// Sample rate (0.0 to 1.0)
+    #[serde(default = "default_sample_rate")]
+    pub sample_rate: f64,
+}
+
+fn default_metrics_path() -> String {
+    "/metrics".to_string()
+}
+
+fn default_otlp_endpoint() -> String {
+    "http://localhost:4317".to_string()
+}
+
+fn default_service_name() -> String {
+    "api-gateway".to_string()
+}
+
+fn default_service_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+fn default_sample_rate() -> f64 {
+    1.0
+}
+
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
@@ -355,6 +420,7 @@ impl GatewayConfig {
             rate_limiting: None,
             circuit_breaker: None,
             retry: None,
+            observability: None,
         }
     }
 }
@@ -424,6 +490,7 @@ routes: []
             rate_limiting: None,
             circuit_breaker: None,
             retry: None,
+            observability: None,
         };
 
         assert!(config.validate().is_err());
@@ -449,6 +516,7 @@ routes: []
             rate_limiting: None,
             circuit_breaker: None,
             retry: None,
+            observability: None,
         };
 
         assert!(config.validate().is_err());
@@ -474,6 +542,7 @@ routes: []
             rate_limiting: None,
             circuit_breaker: None,
             retry: None,
+            observability: None,
         };
 
         assert!(config.validate().is_err());
@@ -499,6 +568,7 @@ routes: []
             rate_limiting: None,
             circuit_breaker: None,
             retry: None,
+            observability: None,
         };
 
         assert!(config.validate().is_ok());

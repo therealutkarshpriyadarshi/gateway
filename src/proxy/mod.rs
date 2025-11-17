@@ -1,6 +1,7 @@
 use crate::auth::AuthService;
 use crate::circuit_breaker::{CircuitBreakerService, RetryExecutor};
 use crate::error::{GatewayError, Result};
+use crate::metrics;
 use crate::router::Router;
 use axum::{
     body::Body,
@@ -64,6 +65,9 @@ pub async fn proxy_handler(
         .map(|ConnectInfo(addr)| addr.ip())
         .unwrap_or_else(|| "127.0.0.1".parse().unwrap());
 
+    // Start metrics timer
+    let mut timer = metrics::Timer::new(method.to_string(), path.to_string());
+
     info!(
         method = %method,
         path = %path,
@@ -97,13 +101,22 @@ pub async fn proxy_handler(
                                 method = ?auth_result.method,
                                 "Authentication successful"
                             );
+                            // Record successful authentication
+                            metrics::record_auth_attempt(
+                                &format!("{:?}", auth_result.method),
+                                true,
+                            );
                         }
                         Err(e) => {
                             warn!(error = %e, "Authentication failed");
+                            // Record failed authentication
+                            metrics::record_auth_attempt("unknown", false);
+                            timer.record(401);
                             return Err(e);
                         }
                     }
                 } else {
+                    timer.record(500);
                     return Err(GatewayError::Config(
                         "Authentication required but no auth service configured".to_string(),
                     ));
@@ -113,11 +126,22 @@ pub async fn proxy_handler(
     }
 
     // Select backend using load balancer
-    let backend = route_match
+    let backend = match route_match
         .route
         .load_balancer
         .select_backend(Some(client_ip))
-        .ok_or_else(|| GatewayError::Backend("No healthy backend available".to_string()))?;
+    {
+        Some(backend) => backend,
+        None => {
+            timer.record(503);
+            return Err(GatewayError::Backend(
+                "No healthy backend available".to_string(),
+            ));
+        }
+    };
+
+    // Set backend on timer for metrics
+    timer.set_backend(backend.url().to_string());
 
     debug!(
         backend = %backend.url(),
@@ -125,6 +149,9 @@ pub async fn proxy_handler(
         total_count = route_match.route.load_balancer.total_count(),
         "Selected backend"
     );
+
+    // Record backend health
+    metrics::record_backend_health(backend.url(), backend.is_healthy());
 
     // Build backend URL
     let mut backend_url = route_match.build_backend_url(backend.url(), path);
@@ -141,6 +168,9 @@ pub async fn proxy_handler(
     if let Some(circuit_breaker) = &state.circuit_breaker {
         if !circuit_breaker.can_proceed(&backend_url_for_cb).await {
             warn!(backend = %backend_url_for_cb, "Circuit breaker open, rejecting request");
+            // Record circuit breaker state as open
+            metrics::record_circuit_breaker_state(&backend_url_for_cb, 1);
+            timer.record(503);
             return Err(GatewayError::CircuitBreakerOpen(format!(
                 "Circuit breaker is open for backend: {}",
                 backend_url_for_cb
@@ -150,6 +180,9 @@ pub async fn proxy_handler(
 
     // Track connection for least connections strategy
     backend.increment_connections();
+
+    // Record active connections
+    metrics::record_active_connections(backend.url(), backend.active_connections() as i64);
 
     // Collect request body and headers for potential retries
     let method_for_request = req.method().clone();
@@ -199,6 +232,9 @@ pub async fn proxy_handler(
     // Decrement connection counter
     backend.decrement_connections();
 
+    // Record active connections after decrement
+    metrics::record_active_connections(backend.url(), backend.active_connections() as i64);
+
     // Record result in circuit breaker
     if let Some(circuit_breaker) = &state.circuit_breaker {
         match &response {
@@ -206,16 +242,20 @@ pub async fn proxy_handler(
                 // Consider 5xx status codes as failures
                 if resp.status().is_server_error() {
                     circuit_breaker.record_failure(&backend_url_for_cb).await;
+                    metrics::record_circuit_breaker_state(&backend_url_for_cb, 0);
                 } else {
                     circuit_breaker.record_success(&backend_url_for_cb).await;
+                    metrics::record_circuit_breaker_state(&backend_url_for_cb, 0);
                 }
             }
             Err(e) => match e {
                 GatewayError::Timeout(_) => {
                     circuit_breaker.record_timeout(&backend_url_for_cb).await;
+                    metrics::record_circuit_breaker_state(&backend_url_for_cb, 0);
                 }
                 _ => {
                     circuit_breaker.record_failure(&backend_url_for_cb).await;
+                    metrics::record_circuit_breaker_state(&backend_url_for_cb, 0);
                 }
             },
         }
@@ -225,25 +265,44 @@ pub async fn proxy_handler(
     if let Some(health_checker) = &route_match.route.health_checker {
         let success = response.is_ok() && !response.as_ref().unwrap().status().is_server_error();
         health_checker.passive_check(&backend, success);
+
+        // Update backend health metric
+        metrics::record_backend_health(backend.url(), backend.is_healthy());
     }
 
-    // Log result
-    match &response {
+    // Record final metrics and log result
+    let final_status = match &response {
         Ok(resp) => {
+            let status_code = resp.status().as_u16();
             info!(
                 status = %resp.status(),
                 backend = %backend.url(),
+                latency_ms = timer.elapsed() * 1000.0,
                 "Request completed"
             );
+            status_code
         }
         Err(e) => {
+            let status_code = match e {
+                GatewayError::Unauthorized(_) | GatewayError::InvalidToken(_) => 401,
+                GatewayError::RouteNotFound(_) => 404,
+                GatewayError::InvalidMethod(_) => 405,
+                GatewayError::Timeout(_) => 504,
+                GatewayError::CircuitBreakerOpen(_) => 503,
+                _ => 502,
+            };
             warn!(
                 error = %e,
                 backend = %backend.url(),
+                latency_ms = timer.elapsed() * 1000.0,
                 "Request failed"
             );
+            status_code
         }
-    }
+    };
+
+    // Record metrics with timer
+    timer.record(final_status);
 
     response
 }

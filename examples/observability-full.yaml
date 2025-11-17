@@ -1,0 +1,124 @@
+# Gateway Configuration with Complete Observability
+# This configuration demonstrates full observability with Prometheus metrics and OpenTelemetry tracing
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  timeout_secs: 30
+
+# Observability Configuration
+observability:
+  # Metrics configuration
+  metrics:
+    enabled: true
+    path: "/metrics"  # Prometheus metrics endpoint
+
+  # Tracing configuration (OpenTelemetry)
+  tracing:
+    enabled: true
+    otlp_endpoint: "http://localhost:4317"  # OTLP gRPC endpoint
+    service_name: "api-gateway"
+    service_version: "0.1.0"
+    sample_rate: 1.0  # Sample 100% of traces (adjust for production)
+
+# Circuit Breaker Configuration
+circuit_breaker:
+  failure_threshold: 5      # Open after 5 failures
+  success_threshold: 2      # Close after 2 successes in half-open
+  timeout_secs: 60          # Wait 60s before trying half-open
+
+# Retry Configuration
+retry:
+  max_retries: 3
+  initial_backoff_ms: 100
+  max_backoff_ms: 5000
+
+routes:
+  # Protected route with authentication
+  - path: "/api/users/*path"
+    backends:
+      - url: "http://localhost:3000"
+        weight: 1
+      - url: "http://localhost:3001"
+        weight: 1
+    load_balancer:
+      strategy: "round_robin"
+    health_check:
+      enabled: true
+      interval_secs: 10
+      timeout_secs: 5
+      path: "/health"
+    auth:
+      required: true
+      methods: ["jwt"]
+    description: "User service with auth and load balancing"
+
+  # High-traffic route with rate limiting
+  - path: "/api/products/*path"
+    backends:
+      - url: "http://localhost:3002"
+        weight: 2
+      - url: "http://localhost:3003"
+        weight: 1
+    load_balancer:
+      strategy: "weighted"
+    health_check:
+      enabled: true
+      interval_secs: 10
+      timeout_secs: 5
+      path: "/health"
+    rate_limit:
+      - dimension: "ip"
+        requests: 100
+        window_secs: 60
+    description: "Product service with rate limiting"
+
+# Authentication Configuration
+auth:
+  jwt:
+    secret: "your-secret-key-change-in-production"
+    algorithm: "HS256"
+    issuer: "https://auth.example.com"
+    audience: "https://api.example.com"
+
+# Example Usage:
+# 1. Start OTLP collector (e.g., Jaeger):
+#    docker run -d --name jaeger \
+#      -e COLLECTOR_OTLP_ENABLED=true \
+#      -p 16686:16686 \
+#      -p 4317:4317 \
+#      -p 4318:4318 \
+#      jaegertracing/all-in-one:latest
+#
+# 2. Start Prometheus:
+#    docker run -d --name prometheus \
+#      -p 9090:9090 \
+#      -v $(pwd)/prometheus.yml:/etc/prometheus/prometheus.yml \
+#      prom/prometheus
+#
+# 3. Start the gateway:
+#    cargo run -- examples/observability-full.yaml
+#
+# 4. View traces:
+#    http://localhost:16686 (Jaeger UI)
+#
+# 5. View metrics:
+#    http://localhost:8080/metrics (raw)
+#    http://localhost:9090 (Prometheus UI)
+#
+# 6. Query metrics in Prometheus:
+#    - rate(gateway_requests_total[1m])
+#    - histogram_quantile(0.95, gateway_request_duration_seconds_bucket)
+#    - gateway_backend_healthy
+#    - gateway_circuit_breaker_state
+#
+# Trace Context Propagation:
+# - The gateway automatically propagates W3C Trace Context headers
+# - Request ID is generated for each request (x-request-id header)
+# - Traces include method, path, status, and latency information
+#
+# Observability Stack Integration:
+# - Prometheus for metrics collection and alerting
+# - Grafana for visualization (import included dashboard.json)
+# - Jaeger/Tempo for distributed tracing
+# - ELK/Loki for log aggregation (JSON structured logs)

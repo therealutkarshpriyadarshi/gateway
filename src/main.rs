@@ -4,9 +4,6 @@ use std::process;
 
 #[tokio::main]
 async fn main() {
-    // Initialize tracing
-    init_tracing();
-
     // Get config file path from command line or use default
     let config_path = env::args()
         .nth(1)
@@ -21,6 +18,12 @@ async fn main() {
             process::exit(1);
         }
     };
+
+    // Initialize tracing with config (to support OpenTelemetry)
+    if let Err(e) = init_tracing(Some(&config)) {
+        eprintln!("Failed to initialize tracing: {}", e);
+        process::exit(1);
+    }
 
     // Start the gateway
     if let Err(e) = init_gateway(config).await {
