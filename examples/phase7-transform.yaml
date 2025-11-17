@@ -1,0 +1,93 @@
+# Phase 7 Example: Request/Response Transformations
+# This configuration demonstrates how to transform requests and responses
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  timeout_secs: 30
+
+routes:
+  # Example 1: Header transformations
+  - path: "/api/users/*path"
+    backend: "http://localhost:3000"
+    description: "User service with header transformations"
+    transform:
+      request:
+        # Add headers (won't override existing)
+        add_headers:
+          X-Gateway-Version: "1.0"
+          X-Request-ID: "auto-generated"
+        # Set headers (will override existing)
+        set_headers:
+          X-Forwarded-Proto: "https"
+        # Remove headers
+        remove_headers:
+          - "Cookie"
+      response:
+        # Add custom response headers
+        add_headers:
+          X-Powered-By: "Rust Gateway"
+        # Remove server identification
+        remove_headers:
+          - "Server"
+          - "X-AspNet-Version"
+
+  # Example 2: Path rewriting
+  - path: "/v1/*path"
+    backend: "http://localhost:3001"
+    description: "Path rewriting example"
+    transform:
+      request:
+        # Rewrite /v1/users to /api/v2/users
+        path_rewrites:
+          - pattern: '^/v1/(.*)$'
+            replacement: "/api/v2/$1"
+
+  # Example 3: Query parameter transformations
+  - path: "/search"
+    backend: "http://localhost:3002"
+    description: "Query parameter transformations"
+    transform:
+      request:
+        query_params:
+          # Add default parameters
+          add:
+            api_version: "2.0"
+            source: "gateway"
+          # Override specific parameters
+          set:
+            format: "json"
+          # Remove sensitive parameters
+          remove:
+            - "debug"
+            - "internal_token"
+
+  # Example 4: Complete transformation
+  - path: "/legacy/*path"
+    backend: "http://localhost:3003"
+    description: "Complete request/response transformation"
+    transform:
+      request:
+        # Rewrite legacy paths
+        path_rewrites:
+          - pattern: '^/legacy/(.*)$'
+            replacement: "/modern/$1"
+        # Clean up headers
+        set_headers:
+          Accept: "application/json"
+        remove_headers:
+          - "X-Legacy-Header"
+        # Normalize query parameters
+        query_params:
+          add:
+            version: "new"
+          remove:
+            - "old_param"
+      response:
+        # Add CORS headers
+        set_headers:
+          Access-Control-Allow-Origin: "*"
+        # Remove internal headers
+        remove_headers:
+          - "X-Internal-Debug"
+          - "X-Database-Query-Time"

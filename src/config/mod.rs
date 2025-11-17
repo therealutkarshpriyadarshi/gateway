@@ -1,8 +1,13 @@
+use crate::cache::CacheConfig;
 use crate::circuit_breaker::types::{CircuitBreakerConfig, RetryConfig};
+use crate::cors::CorsConfig;
 use crate::error::{GatewayError, Result};
 use crate::healthcheck::HealthCheckConfig;
+use crate::hotreload::HotReloadConfig;
+use crate::ipfilter::IpFilterConfig;
 use crate::loadbalancer::backend::BackendConfig;
 use crate::rate_limit::types::RateLimitConfig;
+use crate::transform::TransformConfig;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -28,6 +33,21 @@ pub struct GatewayConfig {
     /// Observability configuration
     #[serde(default)]
     pub observability: Option<ObservabilityConfig>,
+    /// Hot reload configuration
+    #[serde(default)]
+    pub hot_reload: Option<HotReloadConfig>,
+    /// Global CORS configuration
+    #[serde(default)]
+    pub cors: Option<CorsConfig>,
+    /// Global IP filtering configuration
+    #[serde(default)]
+    pub ip_filter: Option<IpFilterConfig>,
+    /// Global cache configuration
+    #[serde(default)]
+    pub cache: Option<CacheConfig>,
+    /// Request size limit in bytes
+    #[serde(default)]
+    pub max_request_size: Option<usize>,
 }
 
 /// Server configuration
@@ -76,6 +96,18 @@ pub struct RouteConfig {
     /// Rate limiting for this route
     #[serde(default)]
     pub rate_limit: Option<Vec<RateLimitConfig>>,
+    /// Request/response transformation for this route
+    #[serde(default)]
+    pub transform: Option<TransformConfig>,
+    /// CORS configuration for this route (overrides global)
+    #[serde(default)]
+    pub cors: Option<CorsConfig>,
+    /// IP filtering for this route (overrides global)
+    #[serde(default)]
+    pub ip_filter: Option<IpFilterConfig>,
+    /// Cache configuration for this route (overrides global)
+    #[serde(default)]
+    pub cache: Option<CacheConfig>,
 }
 
 /// Load balancer configuration
@@ -421,6 +453,11 @@ impl GatewayConfig {
             circuit_breaker: None,
             retry: None,
             observability: None,
+            hot_reload: None,
+            cors: None,
+            ip_filter: None,
+            cache: None,
+            max_request_size: None,
         }
     }
 }
@@ -485,12 +522,21 @@ routes: []
                 description: "".to_string(),
                 auth: None,
                 rate_limit: None,
+                transform: None,
+                cors: None,
+                ip_filter: None,
+                cache: None,
             }],
             auth: None,
             rate_limiting: None,
             circuit_breaker: None,
             retry: None,
             observability: None,
+            hot_reload: None,
+            cors: None,
+            ip_filter: None,
+            cache: None,
+            max_request_size: None,
         };
 
         assert!(config.validate().is_err());
@@ -511,12 +557,21 @@ routes: []
                 description: "".to_string(),
                 auth: None,
                 rate_limit: None,
+                transform: None,
+                cors: None,
+                ip_filter: None,
+                cache: None,
             }],
             auth: None,
             rate_limiting: None,
             circuit_breaker: None,
             retry: None,
             observability: None,
+            hot_reload: None,
+            cors: None,
+            ip_filter: None,
+            cache: None,
+            max_request_size: None,
         };
 
         assert!(config.validate().is_err());
@@ -537,12 +592,21 @@ routes: []
                 description: "".to_string(),
                 auth: None,
                 rate_limit: None,
+                transform: None,
+                cors: None,
+                ip_filter: None,
+                cache: None,
             }],
             auth: None,
             rate_limiting: None,
             circuit_breaker: None,
             retry: None,
             observability: None,
+            hot_reload: None,
+            cors: None,
+            ip_filter: None,
+            cache: None,
+            max_request_size: None,
         };
 
         assert!(config.validate().is_err());
@@ -563,12 +627,21 @@ routes: []
                 description: "Test route".to_string(),
                 auth: None,
                 rate_limit: None,
+                transform: None,
+                cors: None,
+                ip_filter: None,
+                cache: None,
             }],
             auth: None,
             rate_limiting: None,
             circuit_breaker: None,
             retry: None,
             observability: None,
+            hot_reload: None,
+            cors: None,
+            ip_filter: None,
+            cache: None,
+            max_request_size: None,
         };
 
         assert!(config.validate().is_ok());
@@ -617,6 +690,10 @@ routes:
             description: "".to_string(),
             auth: None,
             rate_limit: None,
+            transform: None,
+            cors: None,
+            ip_filter: None,
+            cache: None,
         };
 
         let backends = route.get_backends().unwrap();
@@ -646,6 +723,10 @@ routes:
             description: "".to_string(),
             auth: None,
             rate_limit: None,
+            transform: None,
+            cors: None,
+            ip_filter: None,
+            cache: None,
         };
 
         let backends = route.get_backends().unwrap();

@@ -1,0 +1,234 @@
+# Phase 7 Example: Complete - All Advanced Features
+# This configuration demonstrates all Phase 7 features together
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  timeout_secs: 30
+
+# Hot reload configuration
+hot_reload:
+  enabled: true
+  debounce_ms: 1000  # Wait 1 second after file change before reloading
+
+# Global CORS configuration
+cors:
+  allowed_origins:
+    - "https://example.com"
+  allowed_methods:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "DELETE"
+  allowed_headers:
+    - "Content-Type"
+    - "Authorization"
+  allow_credentials: true
+  max_age_secs: 3600
+
+# Global IP filtering
+ip_filter:
+  blacklist:
+    - "192.0.2.0/24"  # Block known bad network
+  default_action: allow
+
+# Global cache configuration
+cache:
+  enabled: true
+  max_capacity: 1000
+  ttl_secs: 300
+  cacheable_methods:
+    - "GET"
+    - "HEAD"
+  cacheable_status_codes:
+    - 200
+    - 404
+
+# Request size limit (10MB)
+max_request_size: 10485760
+
+routes:
+  # Example 1: Public API with all basic features
+  - path: "/api/public/*path"
+    backend: "http://localhost:3000"
+    description: "Public API with caching and CORS"
+    cors:
+      allowed_origins:
+        - "*"
+      allowed_methods:
+        - "GET"
+        - "POST"
+      allowed_headers:
+        - "*"
+    cache:
+      enabled: true
+      ttl_secs: 600
+
+  # Example 2: Admin API with IP filtering and transformations
+  - path: "/api/admin/*path"
+    backend: "http://localhost:3001"
+    description: "Admin API with strict access control"
+    ip_filter:
+      whitelist:
+        - "10.0.0.0/8"
+        - "192.168.1.0/24"
+      default_action: deny
+    transform:
+      request:
+        add_headers:
+          X-Admin-Access: "true"
+      response:
+        remove_headers:
+          - "Server"
+          - "X-Powered-By"
+    auth:
+      required: true
+      methods: ["jwt"]
+
+  # Example 3: API with full transformation pipeline
+  - path: "/api/v1/*path"
+    backend: "http://localhost:3002"
+    description: "Legacy API with path rewriting and transformations"
+    transform:
+      request:
+        path_rewrites:
+          - pattern: '^/api/v1/(.*)$'
+            replacement: "/api/v2/$1"
+        set_headers:
+          X-API-Version: "v2"
+          Accept: "application/json"
+        query_params:
+          add:
+            migrated: "true"
+      response:
+        add_headers:
+          X-Migration-Notice: "Migrated from v1 to v2"
+    cache:
+      enabled: true
+      ttl_secs: 180
+
+  # Example 4: Partner API with IP whitelist and caching
+  - path: "/api/partners/:partner_id/*path"
+    backend: "http://localhost:3003"
+    description: "Partner API with IP filtering and caching"
+    ip_filter:
+      whitelist:
+        - "203.0.113.10"  # Partner A
+        - "203.0.113.20"  # Partner B
+      default_action: deny
+    cache:
+      enabled: true
+      ttl_secs: 300
+      key_headers:
+        - "X-Partner-ID"
+    transform:
+      request:
+        add_headers:
+          X-Partner-Gateway: "enabled"
+
+  # Example 5: Content API with language-aware caching and CORS
+  - path: "/api/content/*path"
+    backend: "http://localhost:3004"
+    description: "Content API with multi-language support"
+    cors:
+      allowed_origins:
+        - "https://app.example.com"
+        - "https://mobile.example.com"
+      allowed_methods:
+        - "GET"
+      exposed_headers:
+        - "Content-Language"
+        - "X-Cache-Status"
+    cache:
+      enabled: true
+      ttl_secs: 600
+      key_headers:
+        - "Accept-Language"
+        - "Accept-Encoding"
+    transform:
+      response:
+        add_headers:
+          X-Cache-Status: "enabled"
+
+  # Example 6: Internal service with strict IP filtering
+  - path: "/internal/*path"
+    backend: "http://localhost:3005"
+    description: "Internal services - private network only"
+    ip_filter:
+      whitelist:
+        - "10.0.0.0/8"
+        - "172.16.0.0/12"
+        - "192.168.0.0/16"
+        - "127.0.0.1"
+      default_action: deny
+    cache:
+      enabled: false  # Don't cache internal services
+    transform:
+      request:
+        add_headers:
+          X-Internal-Request: "true"
+        remove_headers:
+          - "X-Forwarded-For"  # Don't forward external IPs
+
+  # Example 7: Static assets with aggressive caching
+  - path: "/assets/*path"
+    backend: "http://localhost:3006"
+    description: "Static assets with long-term caching"
+    cors:
+      allowed_origins:
+        - "*"
+      allowed_methods:
+        - "GET"
+        - "HEAD"
+    cache:
+      enabled: true
+      ttl_secs: 86400  # 24 hours
+      cacheable_status_codes:
+        - 200
+        - 304
+    transform:
+      response:
+        set_headers:
+          Cache-Control: "public, max-age=86400"
+
+  # Example 8: API with all features combined
+  - path: "/api/premium/*path"
+    backend: "http://localhost:3007"
+    description: "Premium API with all advanced features"
+    # IP filtering
+    ip_filter:
+      blacklist:
+        - "192.0.2.0/24"
+      default_action: allow
+    # Authentication
+    auth:
+      required: true
+      methods: ["jwt", "apikey"]
+    # CORS
+    cors:
+      allowed_origins:
+        - "https://premium.example.com"
+      allowed_methods:
+        - "GET"
+        - "POST"
+        - "PUT"
+        - "DELETE"
+      allow_credentials: true
+    # Caching
+    cache:
+      enabled: true
+      ttl_secs: 300
+      key_headers:
+        - "Authorization"
+    # Transformations
+    transform:
+      request:
+        add_headers:
+          X-Premium-Tier: "enabled"
+        remove_headers:
+          - "X-Debug"
+      response:
+        add_headers:
+          X-Premium-Response: "true"
+        remove_headers:
+          - "X-Internal-Processing-Time"
