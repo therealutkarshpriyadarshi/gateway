@@ -1,0 +1,218 @@
+# Default values for api-gateway Helm chart
+
+# Number of replicas
+replicaCount: 3
+
+image:
+  repository: api-gateway
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+
+service:
+  type: LoadBalancer
+  port: 80
+  httpsPort: 443
+  targetPort: 8080
+  httpsTargetPort: 8443
+  annotations: {}
+  # AWS example:
+  # service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: api.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: gateway-tls-cert
+  #    hosts:
+  #      - api.example.com
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchLabels:
+            app: api-gateway
+        topologyKey: kubernetes.io/hostname
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Gateway configuration
+config:
+  server:
+    host: "0.0.0.0"
+    port: 8080
+    timeout_secs: 30
+
+  routes: []
+  # Example routes:
+  # - path: "/api/users/*path"
+  #   backend: "http://user-service:3000"
+  #   methods: ["GET", "POST", "PUT", "DELETE"]
+  #   description: "User service"
+  #   auth:
+  #     required: true
+  #     methods: ["jwt"]
+
+  auth:
+    jwt:
+      secret: "secret://jwt_secret"
+      algorithm: "HS256"
+    api_key:
+      header: "X-API-Key"
+      keys: {}
+      redis:
+        url: "redis://redis:6379"
+        prefix: "gateway:apikey:"
+
+  rate_limiting:
+    enabled: true
+    backend: "redis"
+    redis:
+      url: "redis://redis:6379"
+      prefix: "ratelimit:"
+    limits:
+      - dimension: "ip"
+        rate: 1000
+        per: 60
+
+  circuit_breaker:
+    failure_threshold: 5
+    success_threshold: 2
+    timeout_secs: 60
+    half_open_max_requests: 3
+
+  retry:
+    max_retries: 3
+    initial_backoff_ms: 100
+    max_backoff_ms: 5000
+    backoff_multiplier: 2.0
+
+  observability:
+    metrics:
+      enabled: true
+      path: "/metrics"
+    tracing:
+      enabled: false
+      otlp_endpoint: ""
+      service_name: "api-gateway"
+      service_version: "0.1.0"
+      sample_rate: 1.0
+
+  tls:
+    enabled: false
+    cert_path: "/etc/gateway/tls/tls.crt"
+    key_path: "/etc/gateway/tls/tls.key"
+    enable_mtls: false
+    ca_cert_path: "/etc/gateway/tls/ca.crt"
+    require_client_cert: true
+
+# Secrets
+secrets:
+  jwt_secret: "CHANGE_ME_GENERATE_RANDOM_SECRET"
+  admin_api_key: ""
+  partner_api_key: ""
+
+# TLS certificates (if using TLS)
+tls:
+  enabled: false
+  # Provide existing secret name or let chart create one
+  existingSecret: ""
+  cert: ""
+  key: ""
+  ca: ""
+
+# Environment variables
+env:
+  RUST_LOG: "info,gateway=debug"
+
+# Monitoring
+monitoring:
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+
+# Probes
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 2
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 0
+  periodSeconds: 2
+  timeoutSeconds: 3
+  failureThreshold: 30

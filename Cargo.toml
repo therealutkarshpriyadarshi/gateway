@@ -80,6 +80,15 @@ notify = "6.1"
 # Caching
 moka = { version = "0.12", features = ["future"] }
 
+# TLS/mTLS support
+rustls = "0.23"
+rustls-pemfile = "2.0"
+tokio-rustls = "0.26"
+axum-server = { version = "0.7", features = ["tls-rustls"] }
+
+# Secrets management
+secrecy = "0.8"
+
 [dev-dependencies]
 # Testing
 tokio-test = "0.4"
@@ -88,6 +97,13 @@ assert-json-diff = "2.0"
 chrono = "0.4"
 rand = "0.8"
 tempfile = "3.10"
+
+# Benchmarking
+criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
+
+[[bench]]
+name = "gateway_benchmarks"
+harness = false
 
 [profile.release]
 opt-level = 3
